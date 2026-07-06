@@ -1,0 +1,1188 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0B0E15">
+<title>Bölüm Defteri</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=Figtree:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0B0E15;
+    --bg-raise:#12172333;
+    --surface:#141A28;
+    --surface-2:#1C2436;
+    --line:#273249;
+    --text:#EFEDE5;
+    --muted:#8B93A8;
+    --gold:#E8B44A;
+    --gold-deep:#B9871F;
+    --hot:#FF6B5E;
+    --ok:#7BC47F;
+    --radius:16px;
+    --nav-h:64px;
+    --font-display:"Bricolage Grotesque", sans-serif;
+    --font-body:"Figtree", sans-serif;
+    --font-mono:"IBM Plex Mono", monospace;
+  }
+  *{box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent;}
+  html{scrollbar-color:var(--line) var(--bg);}
+  body{
+    background:
+      radial-gradient(1200px 500px at 50% -200px, #17203A 0%, transparent 70%),
+      var(--bg);
+    color:var(--text);
+    font-family:var(--font-body);
+    font-size:15px; line-height:1.5; min-height:100vh;
+    padding-bottom:calc(var(--nav-h) + env(safe-area-inset-bottom) + 16px);
+  }
+  button{font-family:inherit; cursor:pointer; color:inherit;}
+  input{font-family:inherit;}
+  img{display:block;}
+  :focus-visible{outline:2px solid var(--gold); outline-offset:2px; border-radius:4px;}
+
+  /* ---------- header ---------- */
+  header{
+    max-width:980px; margin:0 auto;
+    padding:calc(18px + env(safe-area-inset-top)) 18px 6px;
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+  }
+  .brand{font-family:var(--font-display); font-weight:800; font-size:22px; letter-spacing:-0.4px;}
+  .brand .tick{color:var(--gold);}
+  .header-actions{display:flex; gap:6px;}
+  .icon-btn{
+    background:var(--surface); border:1px solid var(--line); color:var(--muted);
+    width:36px; height:36px; border-radius:11px; font-size:15px;
+    display:flex; align-items:center; justify-content:center;
+    transition:color .15s, border-color .15s;
+  }
+  .icon-btn:hover{color:var(--text); border-color:var(--muted);}
+
+  main{max-width:980px; margin:0 auto; padding:12px 18px 40px;}
+  .panel{display:none;}
+  .panel.active{display:block;}
+  .page-title{
+    font-family:var(--font-display); font-weight:800; font-size:26px;
+    letter-spacing:-0.5px; margin:8px 0 14px;
+  }
+
+  /* ---------- segmented control ---------- */
+  .seg{
+    display:flex; background:var(--surface); border:1px solid var(--line);
+    border-radius:13px; padding:4px; gap:4px; margin-bottom:18px;
+  }
+  .seg button{
+    flex:1; background:none; border:none; color:var(--muted);
+    font-family:var(--font-display); font-weight:600; font-size:14px;
+    padding:9px 4px; border-radius:9px; transition:all .15s;
+  }
+  .seg button.active{background:var(--gold); color:#221703;}
+
+  /* ---------- status groups & poster grid ---------- */
+  .group-label{
+    display:flex; align-items:baseline; gap:8px;
+    font-family:var(--font-mono); font-size:11px; letter-spacing:1.6px;
+    text-transform:uppercase; color:var(--muted); margin:24px 2px 12px;
+  }
+  .group-label:first-child{margin-top:4px;}
+  .group-label b{color:var(--gold); font-weight:600;}
+  .group-label::after{content:""; flex:1; height:1px; background:var(--line); align-self:center;}
+
+  .grid{
+    display:grid; grid-template-columns:repeat(auto-fill,minmax(108px,1fr)); gap:12px;
+  }
+  @media (min-width:640px){ .grid{grid-template-columns:repeat(auto-fill,minmax(132px,1fr)); gap:16px;} }
+
+  .card{
+    position:relative; border-radius:var(--radius); overflow:hidden;
+    background:var(--surface); border:1px solid var(--line);
+    aspect-ratio:2/3; cursor:pointer;
+    transition:transform .15s, border-color .15s;
+  }
+  .card:active{transform:scale(.97);}
+  @media (hover:hover){ .card:hover{transform:translateY(-3px); border-color:var(--gold-deep);} }
+  .card img{width:100%; height:100%; object-fit:cover;}
+  .card .no-img{
+    width:100%; height:100%; display:flex; align-items:center; justify-content:center;
+    color:var(--muted); font-family:var(--font-display); font-weight:600;
+    font-size:13px; text-align:center; padding:14px; background:var(--surface-2);
+  }
+  /* cinematic overlay: name + info live on the poster */
+  .card .veil{
+    position:absolute; inset:auto 0 0 0; padding:26px 10px 9px;
+    background:linear-gradient(to top, rgba(6,8,13,.96) 0%, rgba(6,8,13,.72) 55%, transparent 100%);
+  }
+  .card .veil .name{
+    font-weight:700; font-size:12.5px; line-height:1.25;
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
+  }
+  .card .veil .sub{
+    font-family:var(--font-mono); font-size:9.5px; color:var(--muted); margin-top:3px;
+  }
+  .card .veil .sub.hot{color:var(--gold);}
+  .card .bar{position:absolute; left:0; right:0; bottom:0; height:3px; background:rgba(0,0,0,.55);}
+  .card .bar i{display:block; height:100%; background:var(--gold);}
+  .card .bar i.done{background:var(--ok);}
+  .chip{
+    position:absolute; top:8px; left:8px; font-family:var(--font-mono);
+    font-size:9.5px; font-weight:600; letter-spacing:.5px;
+    padding:3px 7px; border-radius:7px;
+  }
+  .chip.today{background:var(--hot); color:#2A0A06;}
+  .chip.watched{background:rgba(123,196,127,.92); color:#0B2410;}
+
+  /* ---------- empty ---------- */
+  .empty{
+    border:1px dashed var(--line); border-radius:var(--radius);
+    padding:44px 22px; text-align:center; color:var(--muted); font-size:14px;
+  }
+  .empty strong{color:var(--text); font-family:var(--font-display); font-size:16px; display:block; margin-bottom:6px;}
+  .empty button{
+    margin-top:14px; background:var(--gold); color:#221703; border:none;
+    padding:9px 18px; border-radius:10px; font-weight:700; font-size:13.5px;
+  }
+
+  /* ---------- upcoming ---------- */
+  .up-list{display:flex; flex-direction:column; gap:10px;}
+  .up-item{
+    display:flex; align-items:center; gap:14px;
+    background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+    padding:12px 14px; cursor:pointer; transition:border-color .15s;
+  }
+  @media (hover:hover){ .up-item:hover{border-color:var(--gold-deep);} }
+  .up-poster{width:44px; height:62px; border-radius:9px; object-fit:cover; flex-shrink:0; background:var(--surface-2);}
+  .up-count{min-width:66px; text-align:center; flex-shrink:0;}
+  .up-count .num{font-family:var(--font-mono); font-weight:600; font-size:22px; line-height:1; color:var(--gold);}
+  .up-count .num.today{color:var(--hot); font-size:15px;}
+  .up-count .unit{font-family:var(--font-mono); font-size:9.5px; color:var(--muted); letter-spacing:1px; text-transform:uppercase; margin-top:3px;}
+  .up-body{flex:1; min-width:0;}
+  .up-body .show-name{font-family:var(--font-display); font-weight:600; font-size:15px; line-height:1.2;}
+  .up-body .ep-info{color:var(--muted); font-size:12.5px; margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .up-body .ep-info .code{font-family:var(--font-mono); color:var(--text); font-size:11.5px;}
+  .up-body .date{font-family:var(--font-mono); font-size:10.5px; color:var(--muted); margin-top:2px;}
+  .tag-newseason{
+    display:inline-block; background:rgba(232,180,74,.16); color:var(--gold);
+    font-size:9.5px; font-weight:700; font-family:var(--font-mono);
+    padding:2px 7px; border-radius:6px; margin-left:7px; vertical-align:1px; letter-spacing:.5px;
+  }
+
+  /* ---------- search / add ---------- */
+  .search-bar{display:flex; gap:8px; margin-bottom:14px;}
+  .search-bar input{
+    flex:1; background:var(--surface); border:1px solid var(--line); color:var(--text);
+    padding:12px 15px; border-radius:12px; font-size:15px; min-width:0;
+  }
+  .search-bar input::placeholder{color:var(--muted);}
+  .search-bar input:focus{outline:none; border-color:var(--gold);}
+  .search-bar button{
+    background:var(--gold); color:#221703; border:none; font-weight:700;
+    padding:0 20px; border-radius:12px; font-size:14px; flex-shrink:0;
+  }
+  .result-list{display:flex; flex-direction:column; gap:9px;}
+  .result-item{
+    display:flex; gap:12px; background:var(--surface); border:1px solid var(--line);
+    border-radius:var(--radius); padding:10px; align-items:center;
+  }
+  .result-item img, .thumb-fb{
+    width:48px; height:68px; border-radius:9px; object-fit:cover; flex-shrink:0;
+    background:var(--surface-2);
+  }
+  .thumb-fb{display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:9px; text-align:center;}
+  .r-body{flex:1; min-width:0;}
+  .r-name{font-weight:600; font-size:14px; line-height:1.25;}
+  .r-sub{color:var(--muted); font-size:12px; margin-top:2px;}
+  .add-btn{
+    background:var(--surface-2); border:1px solid var(--line); color:var(--gold);
+    font-weight:700; font-size:12px; padding:8px 13px; border-radius:9px; flex-shrink:0;
+  }
+  .add-btn:disabled{color:var(--muted); cursor:default;}
+  .hint{color:var(--muted); font-size:12.5px; margin-top:12px; line-height:1.55;}
+  .link-btn{background:none; border:none; color:var(--gold); font-size:12.5px; font-weight:600; padding:0; text-decoration:underline;}
+
+  /* ---------- stats ---------- */
+  .stat-hero{
+    background:linear-gradient(135deg, #1A2135 0%, #141A28 100%);
+    border:1px solid var(--line); border-radius:var(--radius);
+    padding:22px 20px; margin-bottom:12px; text-align:center;
+  }
+  .stat-hero .label{font-family:var(--font-mono); font-size:10.5px; letter-spacing:1.6px; text-transform:uppercase; color:var(--muted);}
+  .stat-hero .value{
+    font-family:var(--font-display); font-weight:800; font-size:34px;
+    letter-spacing:-0.5px; margin-top:6px; color:var(--gold);
+  }
+  .stat-hero .sub{color:var(--muted); font-size:12.5px; margin-top:4px;}
+  .stat-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+  @media (min-width:640px){ .stat-grid{grid-template-columns:repeat(4,1fr);} }
+  .stat-box{
+    background:var(--surface); border:1px solid var(--line); border-radius:14px;
+    padding:14px 14px 12px;
+  }
+  .stat-box .label{font-family:var(--font-mono); font-size:9.5px; letter-spacing:1.2px; text-transform:uppercase; color:var(--muted);}
+  .stat-box .value{font-family:var(--font-display); font-weight:800; font-size:22px; margin-top:4px;}
+  .stat-box .sub{font-size:11.5px; color:var(--muted); margin-top:1px;}
+  .genre-row{display:flex; align-items:center; gap:10px; margin-top:10px;}
+  .genre-row .g-name{width:96px; font-size:12.5px; flex-shrink:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .genre-row .g-bar{flex:1; height:8px; background:var(--surface-2); border-radius:5px; overflow:hidden;}
+  .genre-row .g-bar i{display:block; height:100%; background:var(--gold); border-radius:5px;}
+  .genre-row .g-val{font-family:var(--font-mono); font-size:10.5px; color:var(--muted); width:52px; text-align:right; flex-shrink:0;}
+  .stat-section{
+    background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+    padding:16px 18px; margin-top:12px;
+  }
+  .stat-section h3{font-family:var(--font-display); font-weight:600; font-size:15px; margin-bottom:4px;}
+
+  /* ---------- bottom nav ---------- */
+  .bottom-nav{
+    position:fixed; left:0; right:0; bottom:0; z-index:40;
+    background:rgba(14,18,28,.92); backdrop-filter:blur(14px);
+    border-top:1px solid var(--line);
+    display:flex; justify-content:space-around;
+    padding:6px 8px calc(6px + env(safe-area-inset-bottom));
+    height:calc(var(--nav-h) + env(safe-area-inset-bottom));
+  }
+  .bottom-nav button{
+    background:none; border:none; color:var(--muted);
+    display:flex; flex-direction:column; align-items:center; gap:3px;
+    font-size:10.5px; font-weight:600; flex:1; max-width:110px;
+    padding:5px 0; border-radius:12px; transition:color .15s;
+  }
+  .bottom-nav button svg{width:22px; height:22px; stroke:currentColor; fill:none; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round;}
+  .bottom-nav button.active{color:var(--gold);}
+  .bottom-nav .nav-add svg{width:26px; height:26px;}
+
+  /* ---------- modal ---------- */
+  .modal-backdrop{
+    position:fixed; inset:0; background:rgba(5,7,11,.82); z-index:50;
+    display:none; align-items:flex-end; justify-content:center;
+  }
+  @media (min-width:640px){ .modal-backdrop{align-items:flex-start; padding:40px 16px; overflow-y:auto;} }
+  .modal-backdrop.open{display:flex;}
+  .modal{
+    background:var(--surface); border:1px solid var(--line);
+    border-radius:20px 20px 0 0; width:100%; max-width:620px;
+    max-height:88vh; overflow-y:auto; overscroll-behavior:contain;
+  }
+  @media (min-width:640px){ .modal{border-radius:20px; max-height:none;} }
+  .modal-hero{position:relative; height:150px; overflow:hidden;}
+  .modal-hero img{width:100%; height:100%; object-fit:cover; filter:brightness(.55) saturate(1.1); transform:scale(1.06);}
+  .modal-hero .fade{position:absolute; inset:0; background:linear-gradient(to top, var(--surface) 4%, transparent 70%);}
+  .modal-head{display:flex; gap:16px; padding:0 20px 16px; margin-top:-58px; position:relative;}
+  .modal-head img, .modal-head .thumb-fb{
+    width:88px; height:126px; border-radius:12px; object-fit:cover; flex-shrink:0;
+    border:1px solid var(--line); box-shadow:0 10px 30px rgba(0,0,0,.5);
+  }
+  .modal-head .mh-body{padding-top:52px; min-width:0;}
+  .modal-head h2{font-family:var(--font-display); font-weight:800; font-size:20px; line-height:1.15;}
+  .modal-head .sub{color:var(--muted); font-size:12.5px; margin-top:4px;}
+  .modal-head .stats{font-family:var(--font-mono); font-size:11.5px; color:var(--gold); margin-top:8px; line-height:1.6;}
+  .modal-close{
+    position:absolute; top:12px; right:12px; z-index:2;
+    background:rgba(10,13,20,.7); border:1px solid var(--line); color:var(--text);
+    width:34px; height:34px; border-radius:11px; font-size:15px;
+  }
+  .modal-toolbar{
+    display:flex; gap:7px; padding:4px 20px 14px; flex-wrap:wrap;
+    border-bottom:1px solid var(--line);
+  }
+  .tool-btn{
+    background:var(--surface-2); border:1px solid var(--line); color:var(--text);
+    font-size:12px; font-weight:600; padding:8px 12px; border-radius:9px;
+  }
+  .tool-btn.gold{background:var(--gold); border-color:var(--gold); color:#221703; font-weight:700;}
+  .tool-btn.danger{color:var(--hot);}
+  .season-block{border-bottom:1px solid var(--line);}
+  .season-head{
+    width:100%; display:flex; align-items:center; justify-content:space-between; gap:10px;
+    background:none; border:none; color:var(--text);
+    padding:14px 20px; font-family:var(--font-display); font-weight:600; font-size:15px;
+    text-align:left;
+  }
+  .season-head .s-right{display:flex; align-items:center; gap:12px;}
+  .season-head .s-prog{font-family:var(--font-mono); font-size:11px; color:var(--muted); font-weight:400;}
+  .season-head .s-prog.full{color:var(--ok);}
+  .season-mark{
+    background:none; border:1px solid var(--line); color:var(--gold);
+    font-size:10.5px; font-weight:700; font-family:var(--font-mono);
+    padding:4px 9px; border-radius:7px;
+  }
+  .season-eps{display:none; padding:0 10px 12px;}
+  .season-block.open .season-eps{display:block;}
+  .ep-row{display:flex; align-items:center; gap:11px; padding:8px 10px; border-radius:10px;}
+  @media (hover:hover){ .ep-row:hover{background:var(--surface-2);} }
+  .ep-check{
+    width:22px; height:22px; border-radius:7px; border:1.5px solid var(--muted);
+    background:none; flex-shrink:0; color:transparent; font-size:12px;
+    display:flex; align-items:center; justify-content:center; transition:all .12s;
+  }
+  .ep-check.on{background:var(--gold); border-color:var(--gold); color:#221703;}
+  .ep-code{font-family:var(--font-mono); font-size:11px; color:var(--muted); width:44px; flex-shrink:0;}
+  .ep-name{flex:1; font-size:13px; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .ep-name.future{color:var(--muted); font-style:italic;}
+  .ep-date{font-family:var(--font-mono); font-size:10px; color:var(--muted); flex-shrink:0;}
+  .ep-date.future{color:var(--gold);}
+  .movie-modal-body{padding:6px 20px 24px; color:var(--muted); font-size:13.5px; line-height:1.6;}
+
+  /* ---------- toast ---------- */
+  #toast{
+    position:fixed; bottom:calc(var(--nav-h) + env(safe-area-inset-bottom) + 16px);
+    left:50%; transform:translateX(-50%) translateY(90px);
+    background:var(--surface-2); border:1px solid var(--line); color:var(--text);
+    padding:11px 20px; border-radius:12px; font-size:13.5px; font-weight:500;
+    z-index:99; transition:transform .25s; box-shadow:0 8px 30px rgba(0,0,0,.45);
+    max-width:calc(100vw - 40px); text-align:center;
+  }
+  #toast.show{transform:translateX(-50%) translateY(0);}
+  .spinner{
+    display:inline-block; width:15px; height:15px; border:2px solid var(--line);
+    border-top-color:var(--gold); border-radius:50%; animation:spin .7s linear infinite;
+    vertical-align:-3px; margin-right:8px;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+  @media (prefers-reduced-motion:reduce){ *{transition:none !important; animation:none !important;} }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">Bölüm Defteri<span class="tick">.</span></div>
+  <div class="header-actions">
+    <button class="icon-btn" id="btn-refresh" title="Verileri yenile" aria-label="Verileri yenile">⟳</button>
+    <button class="icon-btn" id="btn-export" title="Yedek al" aria-label="Yedek al">⇩</button>
+    <button class="icon-btn" id="btn-import" title="Yedek yükle" aria-label="Yedek yükle">⇧</button>
+    <input type="file" id="import-file" accept=".json" hidden>
+  </div>
+</header>
+
+<main>
+  <!-- KİTAPLIK -->
+  <section class="panel active" id="panel-library">
+    <div class="seg" role="tablist">
+      <button data-cat="dizi" class="active">Diziler</button>
+      <button data-cat="anime">Anime</button>
+      <button data-cat="film">Filmler</button>
+    </div>
+    <div id="library-content"></div>
+  </section>
+
+  <!-- YAKLAŞANLAR -->
+  <section class="panel" id="panel-upcoming">
+    <h2 class="page-title">Yaklaşanlar</h2>
+    <div id="upcoming-content"></div>
+  </section>
+
+  <!-- EKLE -->
+  <section class="panel" id="panel-add">
+    <h2 class="page-title">Ekle</h2>
+    <div class="seg">
+      <button data-src="tv" class="active">Dizi / Anime</button>
+      <button data-src="movie">Film</button>
+    </div>
+    <div class="search-bar">
+      <input type="text" id="search-input" placeholder="Dizi veya anime ara…">
+      <button id="search-btn">Ara</button>
+    </div>
+    <div class="result-list" id="search-results"></div>
+    <p class="hint" id="search-hint">
+      Dizi ve anime bilgileri TVmaze'den, filmler iTunes arşivinden gelir — ikisi de ücretsizdir ve hesap gerektirmez.
+      Sonuç bulamazsan orijinal (İngilizce/romaji) adıyla aramayı dene.
+    </p>
+  </section>
+
+  <!-- İSTATİSTİK -->
+  <section class="panel" id="panel-stats">
+    <h2 class="page-title">İstatistikler</h2>
+    <div id="stats-content"></div>
+  </section>
+</main>
+
+<nav class="bottom-nav">
+  <button data-panel="library" class="active">
+    <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M8 5v14"/></svg>
+    Kitaplık
+  </button>
+  <button data-panel="upcoming">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+    Yaklaşanlar
+  </button>
+  <button data-panel="add" class="nav-add">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>
+    Ekle
+  </button>
+  <button data-panel="stats">
+    <svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
+    İstatistik
+  </button>
+</nav>
+
+<div class="modal-backdrop" id="modal-backdrop">
+  <div class="modal" id="modal" role="dialog" aria-modal="true"></div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+"use strict";
+/* =========================================================
+   Bölüm Defteri v2 — kişisel dizi / anime / film takipçisi
+   Veri: cihazında (localStorage) · Dizi&anime: TVmaze · Film: iTunes
+   ========================================================= */
+
+const API = "https://api.tvmaze.com";
+const STORE_KEY = "bolumDefteri.v2";
+const OLD_KEY = "bolumDefteri.v1";
+const CACHE_TTL = 12 * 60 * 60 * 1000;
+const DEFAULT_EP_MIN = 30; // süresi bilinmeyen bölümler için varsayım
+
+/* ---------- durum ---------- */
+let state = loadState();
+let activeCat = "dizi";      // kitaplık: dizi | anime | film
+let searchSrc = "tv";        // ekle: tv | movie
+let openId = null;           // açık modal: "s123" (show) | "m..." (film)
+
+function loadState(){
+  try{
+    const raw = localStorage.getItem(STORE_KEY);
+    if(raw){
+      const s = JSON.parse(raw);
+      if(s && s.shows){ s.movies = s.movies || []; return s; }
+    }
+    // v1'den taşı
+    const old = localStorage.getItem(OLD_KEY);
+    if(old){
+      const s1 = JSON.parse(old);
+      const s2 = { shows:{}, movies:[] };
+      Object.values(s1.shows || {}).forEach(sh => {
+        sh.kind = (sh.genres || []).includes("Anime") ? "anime" : "dizi";
+        sh.dropped = false;
+        s2.shows[sh.id] = sh;
+      });
+      (s1.movies || []).forEach(m => s2.movies.push({
+        id:m.id, source:"manual", title:m.title, year:m.year || "",
+        poster:null, runtime:null, watched:!!m.watched, addedAt:m.addedAt || Date.now()
+      }));
+      localStorage.setItem(STORE_KEY, JSON.stringify(s2));
+      return s2;
+    }
+  }catch(e){ console.warn("Kayıt okunamadı:", e); }
+  return { shows:{}, movies:[] };
+}
+function saveState(){
+  try{ localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
+  catch(e){ toast("Kaydetme hatası — depolama dolu olabilir."); }
+}
+
+/* ---------- yardımcılar ---------- */
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const pad2 = n => String(n).padStart(2,"0");
+const epCode = ep => "S" + pad2(ep.season) + "B" + pad2(ep.number ?? 0);
+
+function toast(msg){
+  const t = $("#toast");
+  t.textContent = msg; t.classList.add("show");
+  clearTimeout(t._timer);
+  t._timer = setTimeout(()=> t.classList.remove("show"), 2600);
+}
+function fmtDate(iso){
+  if(!iso) return "";
+  const d = new Date(iso + (iso.length === 10 ? "T00:00:00" : ""));
+  return d.toLocaleDateString("tr-TR", { day:"numeric", month:"short" });
+}
+function fmtDateLong(stamp){
+  if(!stamp) return "";
+  return new Date(stamp).toLocaleDateString("tr-TR", { day:"numeric", month:"long", weekday:"long" });
+}
+function isAired(ep){
+  const ref = ep.airstamp ? new Date(ep.airstamp) : (ep.airdate ? new Date(ep.airdate + "T23:59:59") : null);
+  return ref ? ref.getTime() <= Date.now() : false;
+}
+function countdown(stamp){
+  const t = new Date(stamp), n = new Date();
+  const d0 = new Date(n.getFullYear(), n.getMonth(), n.getDate());
+  const d1 = new Date(t.getFullYear(), t.getMonth(), t.getDate());
+  const days = Math.round((d1 - d0) / 86400000);
+  if(days <= 0) return { num:"Bugün", unit:"yayında", isToday:true };
+  if(days === 1) return { num:"Yarın", unit:"yayında", isToday:false };
+  return { num:String(days), unit:"gün sonra", isToday:false };
+}
+function fmtDuration(totalMin){
+  const d = Math.floor(totalMin / 1440);
+  const h = Math.floor((totalMin % 1440) / 60);
+  const m = Math.round(totalMin % 60);
+  if(d > 0) return d + " gün " + h + " sa";
+  if(h > 0) return h + " sa " + m + " dk";
+  return m + " dk";
+}
+
+/* ---------- TVmaze ---------- */
+async function apiGet(path){
+  const res = await fetch(API + path);
+  if(!res.ok) throw new Error("TVmaze hata: " + res.status);
+  return res.json();
+}
+async function fetchShowBundle(showId){
+  const data = await apiGet("/shows/" + showId + "?embed[]=episodes&embed[]=nextepisode");
+  const episodes = (data._embedded?.episodes || [])
+    .filter(ep => ep.number != null)
+    .map(ep => ({
+      id:ep.id, season:ep.season, number:ep.number, name:ep.name,
+      airdate:ep.airdate || null, airstamp:ep.airstamp || null,
+      runtime:ep.runtime || null
+    }));
+  const nx = data._embedded?.nextepisode;
+  const nextEpisode = nx ? {
+    id:nx.id, season:nx.season, number:nx.number, name:nx.name,
+    airdate:nx.airdate || null,
+    airstamp:nx.airstamp || (nx.airdate ? nx.airdate + "T20:00:00" : null)
+  } : null;
+  return {
+    info:{
+      id:data.id, name:data.name,
+      image:data.image?.medium || null,
+      status:data.status, premiered:data.premiered,
+      genres:data.genres || [],
+      network:data.network?.name || data.webChannel?.name || "",
+      avgRuntime:data.averageRuntime || null
+    },
+    episodes, nextEpisode, fetchedAt:Date.now()
+  };
+}
+async function addShow(showId, name){
+  if(state.shows[showId]){ toast("Zaten listende."); return; }
+  toast((name || "Dizi") + " ekleniyor…");
+  try{
+    const b = await fetchShowBundle(showId);
+    state.shows[showId] = {
+      ...b.info,
+      kind:(b.info.genres || []).includes("Anime") ? "anime" : "dizi",
+      dropped:false,
+      watched:{},
+      addedAt:Date.now(),
+      cache:{ episodes:b.episodes, nextEpisode:b.nextEpisode, fetchedAt:b.fetchedAt }
+    };
+    saveState(); renderAll();
+    toast(b.info.name + " → " + (state.shows[showId].kind === "anime" ? "Anime" : "Diziler") + " ✓");
+  }catch(e){ console.error(e); toast("Eklenemedi — bağlantını kontrol et."); }
+}
+async function refreshShow(showId, silent){
+  const show = state.shows[showId];
+  if(!show) return;
+  try{
+    const b = await fetchShowBundle(showId);
+    const kind = show.kind, dropped = show.dropped; // kullanıcı seçimlerini koru
+    Object.assign(show, b.info);
+    show.kind = kind; show.dropped = dropped;
+    show.cache = { episodes:b.episodes, nextEpisode:b.nextEpisode, fetchedAt:b.fetchedAt };
+    saveState();
+    if(!silent) toast(show.name + " güncellendi ✓");
+  }catch(e){ console.error(e); if(!silent) toast(show.name + " güncellenemedi."); }
+}
+async function refreshAll(manual){
+  const ids = Object.keys(state.shows);
+  if(!ids.length){ if(manual) toast("Listende dizi yok."); return; }
+  if(manual) toast("Yenileniyor…");
+  for(const id of ids){
+    const show = state.shows[id];
+    const stale = !show.cache || (Date.now() - (show.cache.fetchedAt || 0)) > CACHE_TTL;
+    if(manual || stale){
+      await refreshShow(id, true);
+      await new Promise(r => setTimeout(r, 350));
+    }
+  }
+  renderAll();
+  if(manual) toast("Hepsi güncel ✓");
+}
+
+/* ---------- iTunes (film) — JSONP, anahtarsız ---------- */
+function jsonp(url){
+  return new Promise((resolve, reject) => {
+    const cb = "__jp" + Date.now() + Math.floor(Math.random()*1e4);
+    const s = document.createElement("script");
+    const cleanup = () => { delete window[cb]; s.remove(); };
+    window[cb] = data => { cleanup(); resolve(data); };
+    s.onerror = () => { cleanup(); reject(new Error("jsonp hata")); };
+    s.src = url + "&callback=" + cb;
+    document.head.appendChild(s);
+  });
+}
+async function searchMovies(q){
+  const url = "https://itunes.apple.com/search?media=movie&limit=20&country=TR&term=" + encodeURIComponent(q);
+  const data = await jsonp(url);
+  return (data.results || []).map(r => ({
+    itunesId:r.trackId,
+    title:r.trackName,
+    year:r.releaseDate ? r.releaseDate.slice(0,4) : "",
+    poster:r.artworkUrl100 ? r.artworkUrl100.replace("100x100", "400x400") : null,
+    runtime:r.trackTimeMillis ? Math.round(r.trackTimeMillis / 60000) : null,
+    genre:r.primaryGenreName || "",
+    desc:r.longDescription || ""
+  }));
+}
+function addMovieFromSearch(m){
+  if(state.movies.some(x => x.itunesId && x.itunesId === m.itunesId)){ toast("Zaten listende."); return; }
+  state.movies.push({
+    id:"m" + Date.now(), itunesId:m.itunesId, source:"itunes",
+    title:m.title, year:m.year, poster:m.poster, runtime:m.runtime,
+    genre:m.genre, desc:m.desc, watched:false, addedAt:Date.now()
+  });
+  saveState(); renderAll();
+  toast(m.title + " → Filmler ✓");
+}
+function addMovieManual(){
+  const title = prompt("Film adı:");
+  if(!title || !title.trim()) return;
+  const year = prompt("Yılı (boş bırakabilirsin):") || "";
+  state.movies.push({
+    id:"m" + Date.now(), source:"manual", title:title.trim(), year:year.trim(),
+    poster:null, runtime:null, genre:"", desc:"", watched:false, addedAt:Date.now()
+  });
+  saveState(); renderAll();
+  toast("Film eklendi ✓");
+}
+
+/* ---------- türetilmiş bilgiler ---------- */
+function showProgress(show){
+  const eps = show.cache?.episodes || [];
+  const aired = eps.filter(isAired);
+  return { aired:aired.length, watched:aired.filter(ep => show.watched[ep.id]).length, total:eps.length };
+}
+function nextToWatch(show){
+  return (show.cache?.episodes || []).filter(isAired).find(ep => !show.watched[ep.id]) || null;
+}
+function isNewSeason(show){
+  const nx = show.cache?.nextEpisode;
+  if(!nx || nx.number !== 1 || nx.season <= 1) return false;
+  const maxAired = (show.cache?.episodes || []).filter(isAired).reduce((m,e)=>Math.max(m,e.season),0);
+  return nx.season > maxAired;
+}
+/* Durum: izlenecek | devam | guncel | bitti (+ dropped ayrı bayrak) */
+function showStatus(show){
+  const p = showProgress(show);
+  if(p.watched === 0) return "izlenecek";
+  if(p.aired > 0 && p.watched >= p.aired) return show.status === "Ended" ? "bitti" : "guncel";
+  return "devam";
+}
+function epMinutes(show, ep){
+  return ep.runtime || show.avgRuntime || DEFAULT_EP_MIN;
+}
+
+/* ---------- render: kitaplık ---------- */
+const GROUPS = [
+  ["devam",     "İzlemeye devam"],
+  ["guncel",    "Güncel — yeni bölüm bekliyor"],
+  ["izlenecek", "İzlenecekler"],
+  ["bitti",     "Bitirdiklerin"],
+  ["birakilan", "Bırakılanlar"]
+];
+
+function showCard(s){
+  const p = showProgress(s);
+  const pct = p.aired ? Math.round(p.watched / p.aired * 100) : 0;
+  const nx = s.cache?.nextEpisode;
+  const nextEp = nextToWatch(s);
+  let sub = "", hot = "", chip = "";
+  if(s.dropped){ sub = "Bırakıldı"; }
+  else if(nextEp){ sub = "Sıradaki " + epCode(nextEp); }
+  else if(nx && nx.airstamp){
+    const c = countdown(nx.airstamp);
+    if(c.isToday){ sub = "Yeni bölüm bugün!"; chip = `<span class="chip today">BUGÜN</span>`; }
+    else sub = c.num === "Yarın" ? "Yarın yeni bölüm" : c.num + " gün sonra";
+    hot = " hot";
+  }
+  else if(s.status === "Ended" && p.watched >= p.aired && p.aired > 0){ sub = "Tamamlandı"; }
+  else{ sub = "Yeni bölüm bekleniyor"; }
+  const img = s.image
+    ? `<img src="${esc(s.image)}" alt="" loading="lazy">`
+    : `<div class="no-img">${esc(s.name)}</div>`;
+  return `<div class="card" onclick="openShow(${s.id})" role="button" tabindex="0"
+               onkeydown="if(event.key==='Enter')openShow(${s.id})">
+    ${chip}${img}
+    <div class="veil">
+      <div class="name">${esc(s.name)}</div>
+      <div class="sub${hot}">${esc(sub)} · ${p.watched}/${p.aired}</div>
+    </div>
+    <div class="bar"><i class="${pct>=100?'done':''}" style="width:${pct}%"></i></div>
+  </div>`;
+}
+
+function movieCard(m){
+  const img = m.poster
+    ? `<img src="${esc(m.poster)}" alt="" loading="lazy">`
+    : `<div class="no-img">${esc(m.title)}</div>`;
+  const chip = m.watched ? `<span class="chip watched">İZLENDİ ✓</span>` : "";
+  return `<div class="card" onclick="openMovie('${m.id}')" role="button" tabindex="0"
+               onkeydown="if(event.key==='Enter')openMovie('${m.id}')">
+    ${chip}${img}
+    <div class="veil">
+      <div class="name">${esc(m.title)}</div>
+      <div class="sub">${esc(m.year || "")}${m.runtime ? " · " + m.runtime + " dk" : ""}</div>
+    </div>
+  </div>`;
+}
+
+function renderLibrary(){
+  const box = $("#library-content");
+  if(activeCat === "film"){
+    const toWatch = state.movies.filter(m => !m.watched).sort((a,b)=>b.addedAt-a.addedAt);
+    const watched = state.movies.filter(m => m.watched).sort((a,b)=>b.addedAt-a.addedAt);
+    if(!state.movies.length){
+      box.innerHTML = `<div class="empty"><strong>Film listen boş</strong>
+        İzlemek istediğin filmleri ekle; izledikçe işaretle.
+        <br><button onclick="goAdd('movie')">Film ekle</button></div>`;
+      return;
+    }
+    let html = "";
+    if(toWatch.length) html += `<div class="group-label">İzlenecekler <b>${toWatch.length}</b></div><div class="grid">${toWatch.map(movieCard).join("")}</div>`;
+    if(watched.length) html += `<div class="group-label">İzlendi <b>${watched.length}</b></div><div class="grid">${watched.map(movieCard).join("")}</div>`;
+    box.innerHTML = html;
+    return;
+  }
+
+  const shows = Object.values(state.shows).filter(s => s.kind === activeCat);
+  if(!shows.length){
+    const what = activeCat === "anime" ? "anime" : "dizi";
+    box.innerHTML = `<div class="empty"><strong>Henüz ${what} eklemedin</strong>
+      Eklediklerin burada izleme durumuna göre gruplanır.
+      <br><button onclick="goAdd('tv')">${activeCat === "anime" ? "Anime" : "Dizi"} ekle</button></div>`;
+    return;
+  }
+  const buckets = { devam:[], guncel:[], izlenecek:[], bitti:[], birakilan:[] };
+  shows.forEach(s => { s.dropped ? buckets.birakilan.push(s) : buckets[showStatus(s)].push(s); });
+  const byName = (a,b)=>a.name.localeCompare(b.name,"tr");
+  let html = "";
+  GROUPS.forEach(([key, label]) => {
+    const list = buckets[key];
+    if(!list.length) return;
+    list.sort(byName);
+    html += `<div class="group-label">${label} <b>${list.length}</b></div>
+             <div class="grid">${list.map(showCard).join("")}</div>`;
+  });
+  box.innerHTML = html;
+}
+
+/* ---------- render: yaklaşanlar ---------- */
+function renderUpcoming(){
+  const box = $("#upcoming-content");
+  const items = [];
+  Object.values(state.shows).forEach(s => {
+    if(s.dropped) return;
+    const nx = s.cache?.nextEpisode;
+    if(nx && (nx.airstamp || nx.airdate)){
+      items.push({ show:s, ep:nx, stamp:nx.airstamp || (nx.airdate + "T20:00:00") });
+    }
+  });
+  items.sort((a,b)=> new Date(a.stamp) - new Date(b.stamp));
+  if(!items.length){
+    box.innerHTML = `<div class="empty"><strong>Yaklaşan bölüm görünmüyor</strong>
+      Devam eden bir dizi ya da anime eklediğinde geri sayım burada başlar.</div>`;
+    return;
+  }
+  box.innerHTML = `<div class="up-list">` + items.map(({show, ep, stamp}) => {
+    const c = countdown(stamp);
+    const poster = show.image
+      ? `<img class="up-poster" src="${esc(show.image)}" alt="" loading="lazy">`
+      : `<div class="up-poster"></div>`;
+    return `<div class="up-item" onclick="openShow(${show.id})" role="button" tabindex="0"
+                 onkeydown="if(event.key==='Enter')openShow(${show.id})">
+      ${poster}
+      <div class="up-body">
+        <div class="show-name">${esc(show.name)}${isNewSeason(show) ? '<span class="tag-newseason">YENİ SEZON</span>' : ''}</div>
+        <div class="ep-info"><span class="code">${epCode(ep)}</span>${ep.name ? " · " + esc(ep.name) : ""}</div>
+        <div class="date">${esc(fmtDateLong(stamp))}</div>
+      </div>
+      <div class="up-count">
+        <div class="num${c.isToday?' today':''}">${c.num}</div>
+        <div class="unit">${c.unit}</div>
+      </div>
+    </div>`;
+  }).join("") + `</div>`;
+}
+
+/* ---------- render: istatistik ---------- */
+function renderStats(){
+  const box = $("#stats-content");
+  let epCount = 0, epMin = 0;
+  let kindMin = { dizi:0, anime:0 };
+  const genreMin = {};
+  Object.values(state.shows).forEach(s => {
+    (s.cache?.episodes || []).forEach(ep => {
+      if(s.watched[ep.id]){
+        const min = epMinutes(s, ep);
+        epCount++; epMin += min;
+        kindMin[s.kind] = (kindMin[s.kind] || 0) + min;
+        (s.genres || []).forEach(g => { if(g !== "Anime") genreMin[g] = (genreMin[g] || 0) + min; });
+      }
+    });
+  });
+  const wMovies = state.movies.filter(m => m.watched);
+  const movieMin = wMovies.reduce((t,m)=> t + (m.runtime || 105), 0);
+  const totalMin = epMin + movieMin;
+
+  if(totalMin === 0 && epCount === 0 && !wMovies.length){
+    box.innerHTML = `<div class="empty"><strong>Henüz istatistik yok</strong>
+      Bölüm ve film işaretledikçe toplam ekran süren burada birikecek.</div>`;
+    return;
+  }
+
+  const topGenres = Object.entries(genreMin).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  const maxG = topGenres.length ? topGenres[0][1] : 1;
+
+  box.innerHTML = `
+    <div class="stat-hero">
+      <div class="label">Toplam ekran süresi</div>
+      <div class="value">${fmtDuration(totalMin)}</div>
+      <div class="sub">${epCount} bölüm + ${wMovies.length} film</div>
+    </div>
+    <div class="stat-grid">
+      <div class="stat-box"><div class="label">Dizi</div>
+        <div class="value">${fmtDuration(kindMin.dizi || 0)}</div>
+        <div class="sub">${Object.values(state.shows).filter(s=>s.kind==="dizi").length} dizi takipte</div></div>
+      <div class="stat-box"><div class="label">Anime</div>
+        <div class="value">${fmtDuration(kindMin.anime || 0)}</div>
+        <div class="sub">${Object.values(state.shows).filter(s=>s.kind==="anime").length} anime takipte</div></div>
+      <div class="stat-box"><div class="label">Film</div>
+        <div class="value">${fmtDuration(movieMin)}</div>
+        <div class="sub">${wMovies.length} film izlendi</div></div>
+      <div class="stat-box"><div class="label">Bölüm</div>
+        <div class="value">${epCount}</div>
+        <div class="sub">işaretlenen bölüm</div></div>
+    </div>
+    ${topGenres.length ? `<div class="stat-section">
+      <h3>En çok izlediğin türler</h3>
+      ${topGenres.map(([g, min]) => `
+        <div class="genre-row">
+          <span class="g-name">${esc(g)}</span>
+          <span class="g-bar"><i style="width:${Math.round(min/maxG*100)}%"></i></span>
+          <span class="g-val">${fmtDuration(min)}</span>
+        </div>`).join("")}
+    </div>` : ""}
+    <p class="hint">Süreler bölümlerin gerçek uzunluklarından hesaplanır; süresi bilinmeyen bölümler için dizinin ortalaması kullanılır.</p>`;
+}
+
+/* ---------- arama ---------- */
+async function doSearch(){
+  const q = $("#search-input").value.trim();
+  const box = $("#search-results");
+  if(!q){ box.innerHTML = ""; return; }
+  box.innerHTML = `<p class="hint"><span class="spinner"></span>Aranıyor…</p>`;
+  try{
+    if(searchSrc === "tv"){
+      const results = await apiGet("/search/shows?q=" + encodeURIComponent(q));
+      if(!results.length){ box.innerHTML = `<p class="hint">Sonuç yok — orijinal adıyla dene.</p>`; return; }
+      box.innerHTML = results.map(r => {
+        const s = r.show;
+        const year = s.premiered ? s.premiered.slice(0,4) : "—";
+        const isAnime = (s.genres||[]).includes("Anime");
+        const inList = !!state.shows[s.id];
+        const img = s.image?.medium
+          ? `<img src="${esc(s.image.medium)}" alt="" loading="lazy">`
+          : `<div class="thumb-fb">görsel yok</div>`;
+        return `<div class="result-item">
+          ${img}
+          <div class="r-body">
+            <div class="r-name">${esc(s.name)}</div>
+            <div class="r-sub">${year} · ${isAnime ? "Anime" : "Dizi"}${s.status==="Running" ? " · Devam ediyor" : (s.status==="Ended" ? " · Bitti" : "")}</div>
+          </div>
+          <button class="add-btn" ${inList?"disabled":""}
+                  onclick='addShow(${s.id}, ${JSON.stringify(String(s.name)).replace(/'/g,"\\u0027")}); this.disabled=true; this.textContent="Listende ✓"'>
+            ${inList ? "Listende ✓" : "+ Ekle"}
+          </button>
+        </div>`;
+      }).join("");
+    }else{
+      const results = await searchMovies(q);
+      if(!results.length){
+        box.innerHTML = `<p class="hint">Film bulunamadı. <button class="link-btn" onclick="addMovieManual()">Elle eklemek ister misin?</button></p>`;
+        return;
+      }
+      box.innerHTML = results.map((m, i) => {
+        window.__movieResults = results;
+        const inList = state.movies.some(x => x.itunesId && x.itunesId === m.itunesId);
+        const img = m.poster
+          ? `<img src="${esc(m.poster.replace("400x400","200x200"))}" alt="" loading="lazy">`
+          : `<div class="thumb-fb">görsel yok</div>`;
+        return `<div class="result-item">
+          ${img}
+          <div class="r-body">
+            <div class="r-name">${esc(m.title)}</div>
+            <div class="r-sub">${esc(m.year || "—")}${m.genre ? " · " + esc(m.genre) : ""}${m.runtime ? " · " + m.runtime + " dk" : ""}</div>
+          </div>
+          <button class="add-btn" ${inList?"disabled":""}
+                  onclick='addMovieFromSearch(window.__movieResults[${i}]); this.disabled=true; this.textContent="Listende ✓"'>
+            ${inList ? "Listende ✓" : "+ Ekle"}
+          </button>
+        </div>`;
+      }).join("") + `<p class="hint">Aradığın burada yoksa <button class="link-btn" onclick="addMovieManual()">elle ekleyebilirsin</button>.</p>`;
+    }
+  }catch(e){
+    console.error(e);
+    box.innerHTML = `<p class="hint">Arama başarısız — bağlantını kontrol edip tekrar dene.</p>`;
+  }
+}
+
+/* ---------- dizi modali ---------- */
+function openShow(id){
+  if(!state.shows[id]) return;
+  openId = "s" + id;
+  renderShowModal();
+  $("#modal-backdrop").classList.add("open");
+  document.body.style.overflow = "hidden";
+}
+function openMovie(id){
+  openId = "m:" + id;
+  renderMovieModal();
+  $("#modal-backdrop").classList.add("open");
+  document.body.style.overflow = "hidden";
+}
+function closeModal(){
+  openId = null;
+  $("#modal-backdrop").classList.remove("open");
+  document.body.style.overflow = "";
+}
+function currentShowId(){ return openId && openId.startsWith("s") ? Number(openId.slice(1)) : null; }
+
+function renderShowModal(keepOpen){
+  const show = state.shows[currentShowId()];
+  if(!show) return;
+  const openSeasons = keepOpen || new Set();
+  const eps = show.cache?.episodes || [];
+  const p = showProgress(show);
+  const seasons = {};
+  eps.forEach(ep => { (seasons[ep.season] = seasons[ep.season] || []).push(ep); });
+  const seasonNums = Object.keys(seasons).map(Number).sort((a,b)=>a-b);
+  if(!keepOpen){
+    const nx = nextToWatch(show);
+    if(nx) openSeasons.add(nx.season);
+    else if(seasonNums.length) openSeasons.add(seasonNums[seasonNums.length-1]);
+  }
+
+  const nxEp = show.cache?.nextEpisode;
+  let nextLine = "";
+  if(nxEp && (nxEp.airstamp || nxEp.airdate)){
+    const c = countdown(nxEp.airstamp || (nxEp.airdate + "T20:00:00"));
+    nextLine = "Sıradaki " + epCode(nxEp) + " — " + (c.isToday ? "bugün yayında!" : (c.num === "Yarın" ? "yarın" : c.num + " gün sonra"));
+  }
+
+  const hero = show.image ? `<img src="${esc(show.image.replace('medium','original'))}" alt="">` : "";
+  const poster = show.image
+    ? `<img src="${esc(show.image)}" alt="">`
+    : `<div class="thumb-fb" style="width:88px;height:126px;border-radius:12px;">görsel yok</div>`;
+
+  $("#modal").innerHTML = `
+    <button class="modal-close" onclick="closeModal()" aria-label="Kapat">✕</button>
+    <div class="modal-hero">${hero}<div class="fade"></div></div>
+    <div class="modal-head">
+      ${poster}
+      <div class="mh-body">
+        <h2>${esc(show.name)}</h2>
+        <div class="sub">${show.premiered ? show.premiered.slice(0,4) : ""}${show.network ? " · " + esc(show.network) : ""}${show.genres?.length ? " · " + esc(show.genres.slice(0,3).join(", ")) : ""}</div>
+        <div class="stats">${p.watched} / ${p.aired} bölüm izlendi${nextLine ? "<br>" + esc(nextLine) : ""}</div>
+      </div>
+    </div>
+    <div class="modal-toolbar">
+      <button class="tool-btn gold" onclick="markAllAired(${show.id})">Hepsini izledim</button>
+      <button class="tool-btn" onclick="toggleDropped(${show.id})">${show.dropped ? "Tekrar takip et" : "Bıraktım"}</button>
+      <button class="tool-btn" onclick="switchKind(${show.id})">${show.kind === "anime" ? "Dizilere taşı" : "Anime'ye taşı"}</button>
+      <button class="tool-btn danger" onclick="removeShow(${show.id})">Sil</button>
+    </div>
+    <div>
+      ${seasonNums.map(sn => {
+        const list = seasons[sn];
+        const airedL = list.filter(isAired);
+        const w = airedL.filter(e=>show.watched[e.id]).length;
+        const full = airedL.length > 0 && w >= airedL.length;
+        return `<div class="season-block${openSeasons.has(sn)?' open':''}" data-season="${sn}">
+          <button class="season-head" onclick="toggleSeason(this)">
+            <span>${sn}. Sezon</span>
+            <span class="s-right">
+              <span class="s-prog${full?' full':''}">${w}/${airedL.length}${airedL.length<list.length ? " · " + (list.length-airedL.length) + " yolda" : ""}</span>
+              <span class="season-mark" onclick="event.stopPropagation();markSeason(${show.id},${sn})" role="button">✓ tümü</span>
+            </span>
+          </button>
+          <div class="season-eps">
+            ${list.map(ep => {
+              const aired = isAired(ep);
+              const on = !!show.watched[ep.id];
+              return `<div class="ep-row">
+                <button class="ep-check${on?' on':''}" ${aired?"":"disabled style='opacity:.3;cursor:default;'"}
+                        onclick="toggleEp(${show.id},${ep.id})" aria-label="${on?'İzlenmedi yap':'İzlendi işaretle'}">✓</button>
+                <span class="ep-code">${epCode(ep)}</span>
+                <span class="ep-name${aired?'':' future'}">${esc(ep.name || "")}</span>
+                <span class="ep-date${aired?'':' future'}">${esc(fmtDate(ep.airdate))}</span>
+              </div>`;
+            }).join("")}
+          </div>
+        </div>`;
+      }).join("")}
+    </div>`;
+}
+
+function renderMovieModal(){
+  const id = openId.slice(2);
+  const m = state.movies.find(x => x.id === id);
+  if(!m) return;
+  const hero = m.poster ? `<img src="${esc(m.poster)}" alt="">` : "";
+  const poster = m.poster
+    ? `<img src="${esc(m.poster)}" alt="">`
+    : `<div class="thumb-fb" style="width:88px;height:126px;border-radius:12px;">görsel yok</div>`;
+  $("#modal").innerHTML = `
+    <button class="modal-close" onclick="closeModal()" aria-label="Kapat">✕</button>
+    <div class="modal-hero">${hero}<div class="fade"></div></div>
+    <div class="modal-head">
+      ${poster}
+      <div class="mh-body">
+        <h2>${esc(m.title)}</h2>
+        <div class="sub">${esc(m.year || "")}${m.genre ? " · " + esc(m.genre) : ""}${m.runtime ? " · " + m.runtime + " dk" : ""}</div>
+        <div class="stats">${m.watched ? "İzlendi ✓" : "İzlenecekler listende"}</div>
+      </div>
+    </div>
+    <div class="modal-toolbar">
+      <button class="tool-btn gold" onclick="toggleMovieWatched('${m.id}')">${m.watched ? "İzlenmedi yap" : "İzledim ✓"}</button>
+      <button class="tool-btn danger" onclick="removeMovie('${m.id}')">Sil</button>
+    </div>
+    ${m.desc ? `<div class="movie-modal-body">${esc(m.desc)}</div>` : `<div style="height:14px"></div>`}`;
+}
+
+/* ---------- modal eylemleri ---------- */
+function currentOpenSeasons(){
+  const set = new Set();
+  document.querySelectorAll("#modal .season-block.open").forEach(b => set.add(Number(b.dataset.season)));
+  return set;
+}
+function toggleSeason(btn){ btn.parentElement.classList.toggle("open"); }
+function toggleEp(showId, epId){
+  const show = state.shows[showId];
+  if(!show) return;
+  if(show.watched[epId]) delete show.watched[epId];
+  else show.watched[epId] = Date.now();
+  saveState();
+  renderShowModal(currentOpenSeasons());
+  renderLibrary(); renderUpcoming(); renderStats();
+}
+function markSeason(showId, sn){
+  const show = state.shows[showId];
+  (show.cache?.episodes || []).forEach(ep => { if(ep.season === sn && isAired(ep)) show.watched[ep.id] = show.watched[ep.id] || Date.now(); });
+  saveState();
+  renderShowModal(currentOpenSeasons());
+  renderLibrary(); renderUpcoming(); renderStats();
+  toast(sn + ". sezon işaretlendi ✓");
+}
+function markAllAired(showId){
+  const show = state.shows[showId];
+  (show.cache?.episodes || []).forEach(ep => { if(isAired(ep)) show.watched[ep.id] = show.watched[ep.id] || Date.now(); });
+  saveState();
+  renderShowModal(currentOpenSeasons());
+  renderLibrary(); renderUpcoming(); renderStats();
+  toast("Yayınlanan her şey işaretlendi ✓");
+}
+function toggleDropped(showId){
+  const show = state.shows[showId];
+  show.dropped = !show.dropped;
+  saveState();
+  renderShowModal(currentOpenSeasons());
+  renderLibrary(); renderUpcoming();
+  toast(show.dropped ? "Bırakılanlara taşındı." : "Tekrar takiptesin ✓");
+}
+function switchKind(showId){
+  const show = state.shows[showId];
+  show.kind = show.kind === "anime" ? "dizi" : "anime";
+  saveState();
+  renderShowModal(currentOpenSeasons());
+  renderLibrary();
+  toast(show.kind === "anime" ? "Anime'ye taşındı." : "Dizilere taşındı.");
+}
+function removeShow(showId){
+  const show = state.shows[showId];
+  if(!confirm(`"${show.name}" tamamen silinsin mi? İşaretlediğin bölümler de gider.`)) return;
+  delete state.shows[showId];
+  saveState(); closeModal(); renderAll();
+  toast("Silindi.");
+}
+function toggleMovieWatched(id){
+  const m = state.movies.find(x => x.id === id);
+  if(m){ m.watched = !m.watched; saveState(); renderMovieModal(); renderLibrary(); renderStats(); }
+}
+function removeMovie(id){
+  const m = state.movies.find(x => x.id === id);
+  if(!m || !confirm(`"${m.title}" silinsin mi?`)) return;
+  state.movies = state.movies.filter(x => x.id !== id);
+  saveState(); closeModal(); renderAll();
+  toast("Silindi.");
+}
+
+/* ---------- yedekleme ---------- */
+function exportBackup(){
+  const blob = new Blob([JSON.stringify(state, null, 2)], { type:"application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  const d = new Date();
+  a.download = `bolum-defteri-yedek-${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast("Yedek indirildi ✓");
+}
+function importBackup(file){
+  const reader = new FileReader();
+  reader.onload = () => {
+    try{
+      const data = JSON.parse(reader.result);
+      if(!data || !data.shows) throw new Error("format");
+      state = { shows:data.shows || {}, movies:data.movies || [] };
+      saveState(); renderAll();
+      toast("Yedek geri yüklendi ✓");
+    }catch(e){ toast("Geçersiz yedek dosyası."); }
+  };
+  reader.readAsText(file);
+}
+
+/* ---------- gezinme ---------- */
+function switchPanel(name){
+  document.querySelectorAll(".bottom-nav button").forEach(b => b.classList.toggle("active", b.dataset.panel === name));
+  document.querySelectorAll(".panel").forEach(p => p.classList.toggle("active", p.id === "panel-" + name));
+  window.scrollTo({top:0});
+  if(name === "add") setTimeout(()=> $("#search-input").focus(), 60);
+}
+function goAdd(src){
+  switchPanel("add");
+  setSearchSrc(src);
+}
+function setSearchSrc(src){
+  searchSrc = src;
+  document.querySelectorAll("#panel-add .seg button").forEach(b => b.classList.toggle("active", b.dataset.src === src));
+  $("#search-input").placeholder = src === "tv" ? "Dizi veya anime ara…" : "Film ara…";
+  $("#search-results").innerHTML = "";
+}
+function renderAll(){ renderLibrary(); renderUpcoming(); renderStats(); }
+
+document.querySelectorAll(".bottom-nav button").forEach(b => b.addEventListener("click", ()=> switchPanel(b.dataset.panel)));
+document.querySelectorAll("#panel-library .seg button").forEach(b => b.addEventListener("click", ()=>{
+  activeCat = b.dataset.cat;
+  document.querySelectorAll("#panel-library .seg button").forEach(x => x.classList.toggle("active", x === b));
+  renderLibrary();
+}));
+document.querySelectorAll("#panel-add .seg button").forEach(b => b.addEventListener("click", ()=> setSearchSrc(b.dataset.src)));
+$("#search-btn").addEventListener("click", doSearch);
+$("#search-input").addEventListener("keydown", e => { if(e.key === "Enter"){ e.target.blur(); doSearch(); } });
+$("#btn-refresh").addEventListener("click", ()=> refreshAll(true));
+$("#btn-export").addEventListener("click", exportBackup);
+$("#btn-import").addEventListener("click", ()=> $("#import-file").click());
+$("#import-file").addEventListener("change", e => { if(e.target.files[0]) importBackup(e.target.files[0]); e.target.value = ""; });
+$("#modal-backdrop").addEventListener("click", e => { if(e.target === e.currentTarget) closeModal(); });
+document.addEventListener("keydown", e => { if(e.key === "Escape" && openId) closeModal(); });
+
+/* ---------- PWA ---------- */
+if("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")){
+  navigator.serviceWorker.register("sw.js").catch(()=>{});
+}
+
+/* ---------- başlat ---------- */
+renderAll();
+refreshAll(false);
+</script>
+</body>
+</html>
