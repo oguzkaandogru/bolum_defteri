@@ -354,6 +354,7 @@
     <button class="icon-btn" id="btn-refresh" title="Verileri yenile" aria-label="Verileri yenile">⟳</button>
     <button class="icon-btn" id="btn-export" title="Yedek al" aria-label="Yedek al">⇩</button>
     <button class="icon-btn" id="btn-import" title="Yedek yükle" aria-label="Yedek yükle">⇧</button>
+    <button class="icon-btn" id="btn-reset" title="Tüm verileri sıfırla" aria-label="Tüm verileri sıfırla">🗑</button>
     <input type="file" id="import-file" accept=".json" hidden>
   </div>
 </header>
@@ -444,12 +445,37 @@ let activeCat = "dizi";      // kitaplık: dizi | anime | film
 let searchSrc = "tv";        // ekle: tv | movie
 let openId = null;           // açık modal: "s123" (show) | "m..." (film)
 
+/* Eski sürüm yedeklerinde eksik olabilecek alanları tamamla */
+function sanitizeState(s){
+  const out = { shows:{}, movies:[] };
+  Object.values(s.shows || {}).forEach(sh => {
+    if(!sh || sh.id == null) return;
+    if(!sh.kind) sh.kind = (sh.genres || []).includes("Anime") ? "anime" : "dizi";
+    if(typeof sh.dropped !== "boolean") sh.dropped = false;
+    sh.watched = sh.watched || {};
+    out.shows[sh.id] = sh;
+  });
+  (s.movies || []).forEach(m => {
+    if(!m || !m.title) return;
+    out.movies.push({
+      id:m.id || ("m" + Date.now() + Math.floor(Math.random()*1e4)),
+      itunesId:m.itunesId || null,
+      source:m.source || "manual",
+      title:m.title, year:m.year || "",
+      poster:m.poster || null, runtime:m.runtime || null,
+      genre:m.genre || "", desc:m.desc || "",
+      watched:!!m.watched, addedAt:m.addedAt || Date.now()
+    });
+  });
+  return out;
+}
+
 function loadState(){
   try{
     const raw = localStorage.getItem(STORE_KEY);
     if(raw){
       const s = JSON.parse(raw);
-      if(s && s.shows){ s.movies = s.movies || []; return s; }
+      if(s && s.shows){ return sanitizeState(s); }
     }
     // v1'den taşı
     const old = localStorage.getItem(OLD_KEY);
@@ -1132,7 +1158,7 @@ function importBackup(file){
     try{
       const data = JSON.parse(reader.result);
       if(!data || !data.shows) throw new Error("format");
-      state = { shows:data.shows || {}, movies:data.movies || [] };
+      state = sanitizeState(data);
       saveState(); renderAll();
       toast("Yedek geri yüklendi ✓");
     }catch(e){ toast("Geçersiz yedek dosyası."); }
@@ -1171,6 +1197,15 @@ $("#search-input").addEventListener("keydown", e => { if(e.key === "Enter"){ e.t
 $("#btn-refresh").addEventListener("click", ()=> refreshAll(true));
 $("#btn-export").addEventListener("click", exportBackup);
 $("#btn-import").addEventListener("click", ()=> $("#import-file").click());
+$("#btn-reset").addEventListener("click", ()=>{
+  if(!confirm("Tüm veriler silinsin mi? Diziler, filmler ve işaretlediğin her bölüm gider.")) return;
+  if(!confirm("Emin misin? Bu işlem geri alınamaz. (İstersen önce ⇩ ile yedek al.)")) return;
+  localStorage.removeItem(STORE_KEY);
+  localStorage.removeItem(OLD_KEY);
+  state = { shows:{}, movies:[] };
+  renderAll();
+  toast("Her şey sıfırlandı — temiz sayfa ✓");
+});
 $("#import-file").addEventListener("change", e => { if(e.target.files[0]) importBackup(e.target.files[0]); e.target.value = ""; });
 $("#modal-backdrop").addEventListener("click", e => { if(e.target === e.currentTarget) closeModal(); });
 document.addEventListener("keydown", e => { if(e.key === "Escape" && openId) closeModal(); });
