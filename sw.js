@@ -1,5 +1,7 @@
-/* Bölüm Defteri — service worker: uygulama kabuğunu önbelleğe alır */
-const CACHE = "bolum-defteri-v1";
+/* Bölüm Defteri — service worker v2
+   Strateji: önce ağdan dene (güncellemeler hemen yansısın),
+   internet yoksa önbellekten sun (çevrimdışı da açılsın). */
+const CACHE = "bolum-defteri-v2";
 const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png"];
 
 self.addEventListener("install", e => {
@@ -12,14 +14,12 @@ self.addEventListener("activate", e => {
 });
 self.addEventListener("fetch", e => {
   const url = new URL(e.request.url);
-  // Sadece kendi dosyalarımızı önbellekten sun; API istekleri hep ağa gitsin
-  if(url.origin === location.origin){
-    e.respondWith(
-      caches.match(e.request).then(r => r || fetch(e.request).then(res => {
-        const copy = res.clone();
-        caches.open(CACHE).then(c => c.put(e.request, copy));
-        return res;
-      }).catch(() => caches.match("./index.html")))
-    );
-  }
+  if(url.origin !== location.origin) return; // API ve görseller normal akışta
+  e.respondWith(
+    fetch(e.request).then(res => {
+      const copy = res.clone();
+      caches.open(CACHE).then(c => c.put(e.request, copy));
+      return res;
+    }).catch(() => caches.match(e.request).then(r => r || caches.match("./index.html")))
+  );
 });

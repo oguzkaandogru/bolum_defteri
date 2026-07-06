@@ -14,7 +14,6 @@
 <style>
   :root{
     --bg:#0B0E15;
-    --bg-raise:#12172333;
     --surface:#141A28;
     --surface-2:#1C2436;
     --line:#273249;
@@ -62,6 +61,7 @@
     transition:color .15s, border-color .15s;
   }
   .icon-btn:hover{color:var(--text); border-color:var(--muted);}
+  .icon-btn.linked{color:var(--gold); border-color:var(--gold-deep);}
 
   main{max-width:980px; margin:0 auto; padding:12px 18px 40px;}
   .panel{display:none;}
@@ -112,7 +112,6 @@
     color:var(--muted); font-family:var(--font-display); font-weight:600;
     font-size:13px; text-align:center; padding:14px; background:var(--surface-2);
   }
-  /* cinematic overlay: name + info live on the poster */
   .card .veil{
     position:absolute; inset:auto 0 0 0; padding:26px 10px 9px;
     background:linear-gradient(to top, rgba(6,8,13,.96) 0%, rgba(6,8,13,.72) 55%, transparent 100%);
@@ -327,6 +326,26 @@
   .ep-date.future{color:var(--gold);}
   .movie-modal-body{padding:6px 20px 24px; color:var(--muted); font-size:13.5px; line-height:1.6;}
 
+  /* ---------- senkron ayarları ---------- */
+  .sync-body{padding:18px 20px 24px;}
+  .sync-body h2{font-family:var(--font-display); font-weight:800; font-size:20px; margin-bottom:4px;}
+  .sync-body .desc{color:var(--muted); font-size:12.5px; line-height:1.55; margin:10px 0 16px;}
+  .sync-body .desc b{color:var(--text);}
+  .field{margin-bottom:12px;}
+  .field label{display:block; font-family:var(--font-mono); font-size:10px; letter-spacing:1.2px; text-transform:uppercase; color:var(--muted); margin-bottom:5px;}
+  .field input{
+    width:100%; background:var(--surface-2); border:1px solid var(--line); color:var(--text);
+    padding:11px 13px; border-radius:10px; font-size:14px;
+  }
+  .field input:focus{outline:none; border-color:var(--gold);}
+  .sync-actions{display:flex; gap:8px; flex-wrap:wrap; margin-top:16px;}
+  .sync-status{
+    font-family:var(--font-mono); font-size:11px; color:var(--muted);
+    margin-top:14px; line-height:1.7;
+  }
+  .sync-status .ok{color:var(--ok);}
+  .sync-status .err{color:var(--hot);}
+
   /* ---------- toast ---------- */
   #toast{
     position:fixed; bottom:calc(var(--nav-h) + env(safe-area-inset-bottom) + 16px);
@@ -351,6 +370,7 @@
 <header>
   <div class="brand">Bölüm Defteri<span class="tick">.</span></div>
   <div class="header-actions">
+    <button class="icon-btn" id="btn-sync" title="GitHub senkron" aria-label="GitHub senkron">☁</button>
     <button class="icon-btn" id="btn-refresh" title="Verileri yenile" aria-label="Verileri yenile">⟳</button>
     <button class="icon-btn" id="btn-export" title="Yedek al" aria-label="Yedek al">⇩</button>
     <button class="icon-btn" id="btn-import" title="Yedek yükle" aria-label="Yedek yükle">⇧</button>
@@ -429,25 +449,27 @@
 <script>
 "use strict";
 /* =========================================================
-   Bölüm Defteri v2 — kişisel dizi / anime / film takipçisi
-   Veri: cihazında (localStorage) · Dizi&anime: TVmaze · Film: iTunes
+   Bölüm Defteri v2.1 — kişisel dizi / anime / film takipçisi
+   Veri: cihazında + istersen GitHub deponda (veri.json)
+   Dizi&anime: TVmaze · Film: iTunes
    ========================================================= */
 
 const API = "https://api.tvmaze.com";
 const STORE_KEY = "bolumDefteri.v2";
 const OLD_KEY = "bolumDefteri.v1";
+const SYNC_KEY = "bolumDefteri.sync";
 const CACHE_TTL = 12 * 60 * 60 * 1000;
-const DEFAULT_EP_MIN = 30; // süresi bilinmeyen bölümler için varsayım
+const DEFAULT_EP_MIN = 30;
 
 /* ---------- durum ---------- */
-let state = loadState();
-let activeCat = "dizi";      // kitaplık: dizi | anime | film
-let searchSrc = "tv";        // ekle: tv | movie
-let openId = null;           // açık modal: "s123" (show) | "m..." (film)
+let activeCat = "dizi";
+let searchSrc = "tv";
+let openId = null;   // "s123" dizi | "m:.." film | "cfg" ayarlar
+let pushTimer = null;
 
 /* Eski sürüm yedeklerinde eksik olabilecek alanları tamamla */
 function sanitizeState(s){
-  const out = { shows:{}, movies:[] };
+  const out = { shows:{}, movies:[], updatedAt:s.updatedAt || 0 };
   Object.values(s.shows || {}).forEach(sh => {
     if(!sh || sh.id == null) return;
     if(!sh.kind) sh.kind = (sh.genres || []).includes("Anime") ? "anime" : "dizi";
@@ -475,31 +497,27 @@ function loadState(){
     const raw = localStorage.getItem(STORE_KEY);
     if(raw){
       const s = JSON.parse(raw);
-      if(s && s.shows){ return sanitizeState(s); }
+      if(s && s.shows) return sanitizeState(s);
     }
     // v1'den taşı
     const old = localStorage.getItem(OLD_KEY);
     if(old){
       const s1 = JSON.parse(old);
-      const s2 = { shows:{}, movies:[] };
-      Object.values(s1.shows || {}).forEach(sh => {
-        sh.kind = (sh.genres || []).includes("Anime") ? "anime" : "dizi";
-        sh.dropped = false;
-        s2.shows[sh.id] = sh;
-      });
-      (s1.movies || []).forEach(m => s2.movies.push({
-        id:m.id, source:"manual", title:m.title, year:m.year || "",
-        poster:null, runtime:null, watched:!!m.watched, addedAt:m.addedAt || Date.now()
-      }));
+      const s2 = sanitizeState({ shows:s1.shows, movies:s1.movies });
       localStorage.setItem(STORE_KEY, JSON.stringify(s2));
       return s2;
     }
   }catch(e){ console.warn("Kayıt okunamadı:", e); }
-  return { shows:{}, movies:[] };
+  return { shows:{}, movies:[], updatedAt:0 };
 }
-function saveState(){
-  try{ localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
-  catch(e){ toast("Kaydetme hatası — depolama dolu olabilir."); }
+let state = loadState();
+
+function saveState(skipPush){
+  try{
+    state.updatedAt = Date.now();
+    localStorage.setItem(STORE_KEY, JSON.stringify(state));
+  }catch(e){ toast("Kaydetme hatası — depolama dolu olabilir."); }
+  if(!skipPush) schedulePush();
 }
 
 /* ---------- yardımcılar ---------- */
@@ -600,7 +618,7 @@ async function refreshShow(showId, silent){
   if(!show) return;
   try{
     const b = await fetchShowBundle(showId);
-    const kind = show.kind, dropped = show.dropped; // kullanıcı seçimlerini koru
+    const kind = show.kind, dropped = show.dropped;
     Object.assign(show, b.info);
     show.kind = kind; show.dropped = dropped;
     show.cache = { episodes:b.episodes, nextEpisode:b.nextEpisode, fetchedAt:b.fetchedAt };
@@ -686,7 +704,6 @@ function isNewSeason(show){
   const maxAired = (show.cache?.episodes || []).filter(isAired).reduce((m,e)=>Math.max(m,e.season),0);
   return nx.season > maxAired;
 }
-/* Durum: izlenecek | devam | guncel | bitti (+ dropped ayrı bayrak) */
 function showStatus(show){
   const p = showProgress(show);
   if(p.watched === 0) return "izlenecek";
@@ -922,12 +939,12 @@ async function doSearch(){
       }).join("");
     }else{
       const results = await searchMovies(q);
+      window.__movieResults = results;
       if(!results.length){
         box.innerHTML = `<p class="hint">Film bulunamadı. <button class="link-btn" onclick="addMovieManual()">Elle eklemek ister misin?</button></p>`;
         return;
       }
       box.innerHTML = results.map((m, i) => {
-        window.__movieResults = results;
         const inList = state.movies.some(x => x.itunesId && x.itunesId === m.itunesId);
         const img = m.poster
           ? `<img src="${esc(m.poster.replace("400x400","200x200"))}" alt="" loading="lazy">`
@@ -951,7 +968,7 @@ async function doSearch(){
   }
 }
 
-/* ---------- dizi modali ---------- */
+/* ---------- modaller ---------- */
 function openShow(id){
   if(!state.shows[id]) return;
   openId = "s" + id;
@@ -970,7 +987,9 @@ function closeModal(){
   $("#modal-backdrop").classList.remove("open");
   document.body.style.overflow = "";
 }
-function currentShowId(){ return openId && openId.startsWith("s") ? Number(openId.slice(1)) : null; }
+function currentShowId(){
+  return openId && /^s\d+$/.test(openId) ? Number(openId.slice(1)) : null;
+}
 
 function renderShowModal(keepOpen){
   const show = state.shows[currentShowId()];
@@ -1141,7 +1160,166 @@ function removeMovie(id){
   toast("Silindi.");
 }
 
-/* ---------- yedekleme ---------- */
+/* =========================================================
+   GitHub senkron — verini kendi deponda veri.json olarak tutar.
+   Token yalnızca bu cihazın deposunda saklanır, hiçbir yere
+   gönderilmez (yalnızca api.github.com'a, senin deponu yazmak için).
+   ========================================================= */
+let sync = loadSync();
+
+function loadSync(){
+  try{ return JSON.parse(localStorage.getItem(SYNC_KEY)) || {}; }
+  catch(e){ return {}; }
+}
+function saveSync(){ localStorage.setItem(SYNC_KEY, JSON.stringify(sync)); }
+function syncReady(){ return !!(sync.token && sync.repo && /^[\w.-]+\/[\w.-]+$/.test(sync.repo)); }
+
+const b64encode = str => btoa(String.fromCharCode(...new TextEncoder().encode(str)));
+const b64decode = str => new TextDecoder().decode(Uint8Array.from(atob(str.replace(/\s/g,"")), c => c.charCodeAt(0)));
+
+function ghUrl(){ return "https://api.github.com/repos/" + sync.repo + "/contents/veri.json"; }
+function ghHeaders(){
+  return {
+    "Authorization": "Bearer " + sync.token,
+    "Accept": "application/vnd.github+json"
+  };
+}
+async function ghGetFile(){
+  const res = await fetch(ghUrl(), { headers: ghHeaders(), cache:"no-store" });
+  if(res.status === 404) return null;
+  if(!res.ok) throw new Error("gh-" + res.status);
+  return res.json();
+}
+async function ghPush(silent){
+  if(!syncReady()) return;
+  try{
+    const existing = await ghGetFile();
+    const body = {
+      message: "Bölüm Defteri — otomatik yedek",
+      content: b64encode(JSON.stringify(state))
+    };
+    if(existing?.sha) body.sha = existing.sha;
+    const res = await fetch(ghUrl(), { method:"PUT", headers: ghHeaders(), body: JSON.stringify(body) });
+    if(!res.ok) throw new Error("gh-" + res.status);
+    sync.lastPush = Date.now();
+    saveSync();
+    if(!silent) toast("GitHub'a kaydedildi ✓");
+    if(openId === "cfg") renderSyncModal();
+  }catch(e){
+    console.error(e);
+    if(!silent){
+      const msg = String(e.message);
+      if(msg.includes("401") || msg.includes("403")) toast("Token geçersiz — yetkileri ve süresini kontrol et.");
+      else if(msg.includes("404")) toast("Depo bulunamadı — 'kullanıcı/depo' biçiminde yaz.");
+      else toast("GitHub'a kaydedilemedi — bağlantını kontrol et.");
+    }
+  }
+}
+async function ghPull(askConfirm){
+  if(!syncReady()) return null;
+  try{
+    const file = await ghGetFile();
+    if(!file){ if(askConfirm) toast("GitHub'da henüz veri yok — önce 'Şimdi kaydet' de."); return null; }
+    const data = JSON.parse(b64decode(file.content));
+    if(!data || !data.shows) throw new Error("format");
+    if(askConfirm && !confirm("GitHub'daki veri bu cihazdakinin ÜZERİNE yazılacak. Devam edilsin mi?")) return null;
+    state = sanitizeState(data);
+    saveState(true); renderAll();
+    if(openId && openId !== "cfg") closeModal();
+    if(askConfirm) toast("GitHub'dan geri yüklendi ✓");
+    return data;
+  }catch(e){
+    console.error(e);
+    if(askConfirm) toast("Geri yükleme başarısız.");
+    return null;
+  }
+}
+function schedulePush(){
+  if(!syncReady()) return;
+  clearTimeout(pushTimer);
+  pushTimer = setTimeout(()=> ghPush(true), 15000); // değişiklikler durulunca 15 sn sonra
+}
+/* Açılışta: GitHub'daki veri daha yeniyse onu al (çok cihaz desteği) */
+async function initialSync(){
+  if(!syncReady()) return;
+  try{
+    const file = await ghGetFile();
+    if(!file) return;
+    const remote = JSON.parse(b64decode(file.content));
+    if(remote?.shows && (remote.updatedAt || 0) > (state.updatedAt || 0)){
+      state = sanitizeState(remote);
+      saveState(true); renderAll();
+      toast("GitHub'daki güncel veri yüklendi ✓");
+    }
+  }catch(e){ console.warn("Açılış senkronu atlandı:", e); }
+}
+
+function openSyncModal(){
+  openId = "cfg";
+  renderSyncModal();
+  $("#modal-backdrop").classList.add("open");
+  document.body.style.overflow = "hidden";
+}
+function renderSyncModal(){
+  const last = sync.lastPush ? new Date(sync.lastPush).toLocaleString("tr-TR") : null;
+  $("#modal").innerHTML = `
+    <button class="modal-close" onclick="closeModal()" aria-label="Kapat">✕</button>
+    <div class="sync-body">
+      <h2>GitHub'a kaydet</h2>
+      <p class="desc">
+        Verilerin, uygulamanın durduğu depoya <b>veri.json</b> dosyası olarak yazılır ve her
+        değişiklikten ~15 saniye sonra otomatik kaydedilir. Depo herkese açıksa bu dosyayı
+        başkaları <b>görebilir ama değiştiremez</b> — yazma yetkisi yalnızca token'ında.
+        <br><br>
+        Token almak için: GitHub → profil → <b>Settings → Developer settings →
+        Personal access tokens → Fine-grained tokens → Generate new token</b>.
+        "Repository access" kısmında <b>Only select repositories</b> deyip yalnızca bu depoyu seç,
+        "Permissions → Contents" iznini <b>Read and write</b> yap. Token'ı kimseyle paylaşma;
+        yalnızca bu cihazda saklanır.
+      </p>
+      <div class="field">
+        <label>Depo (kullanıcıadı/depoadı)</label>
+        <input id="sync-repo" placeholder="kullaniciadin/bolum-defteri" value="${esc(sync.repo || "")}" autocapitalize="off" autocorrect="off" spellcheck="false">
+      </div>
+      <div class="field">
+        <label>Erişim token'ı</label>
+        <input id="sync-token" type="password" placeholder="github_pat_…" value="${esc(sync.token || "")}" autocapitalize="off" autocorrect="off" spellcheck="false">
+      </div>
+      <div class="sync-actions">
+        <button class="tool-btn gold" onclick="saveSyncSettings()">Bağlantıyı kaydet</button>
+        <button class="tool-btn" onclick="ghPush(false)">Şimdi kaydet</button>
+        <button class="tool-btn" onclick="ghPull(true)">GitHub'dan geri yükle</button>
+        ${syncReady() ? `<button class="tool-btn danger" onclick="disconnectSync()">Bağlantıyı kes</button>` : ""}
+      </div>
+      <div class="sync-status">
+        Durum: ${syncReady() ? '<span class="ok">bağlı ✓</span>' : '<span class="err">bağlı değil</span>'}<br>
+        ${last ? "Son kayıt: " + esc(last) : "Henüz GitHub'a kayıt gönderilmedi."}
+      </div>
+    </div>`;
+}
+function saveSyncSettings(){
+  sync.repo = $("#sync-repo").value.trim()
+    .replace(/^https?:\/\/github\.com\//, "").replace(/\.git$/, "").replace(/\/+$/, "");
+  sync.token = $("#sync-token").value.trim();
+  saveSync();
+  updateSyncBadge();
+  if(!syncReady()){ toast("Depo adı 'kullanıcı/depo' biçiminde olmalı ve token boş kalmamalı."); renderSyncModal(); return; }
+  renderSyncModal();
+  toast("Kaydedildi — test için 'Şimdi kaydet' de.");
+}
+function disconnectSync(){
+  if(!confirm("GitHub bağlantısı kesilsin mi? (GitHub'daki veri.json silinmez, sadece bu cihaz bağlantıyı unutur.)")) return;
+  sync = {};
+  localStorage.removeItem(SYNC_KEY);
+  updateSyncBadge();
+  renderSyncModal();
+  toast("Bağlantı kesildi.");
+}
+function updateSyncBadge(){
+  $("#btn-sync").classList.toggle("linked", syncReady());
+}
+
+/* ---------- yerel yedekleme (dosya olarak) ---------- */
 function exportBackup(){
   const blob = new Blob([JSON.stringify(state, null, 2)], { type:"application/json" });
   const a = document.createElement("a");
@@ -1194,6 +1372,7 @@ document.querySelectorAll("#panel-library .seg button").forEach(b => b.addEventL
 document.querySelectorAll("#panel-add .seg button").forEach(b => b.addEventListener("click", ()=> setSearchSrc(b.dataset.src)));
 $("#search-btn").addEventListener("click", doSearch);
 $("#search-input").addEventListener("keydown", e => { if(e.key === "Enter"){ e.target.blur(); doSearch(); } });
+$("#btn-sync").addEventListener("click", openSyncModal);
 $("#btn-refresh").addEventListener("click", ()=> refreshAll(true));
 $("#btn-export").addEventListener("click", exportBackup);
 $("#btn-import").addEventListener("click", ()=> $("#import-file").click());
@@ -1202,7 +1381,7 @@ $("#btn-reset").addEventListener("click", ()=>{
   if(!confirm("Emin misin? Bu işlem geri alınamaz. (İstersen önce ⇩ ile yedek al.)")) return;
   localStorage.removeItem(STORE_KEY);
   localStorage.removeItem(OLD_KEY);
-  state = { shows:{}, movies:[] };
+  state = { shows:{}, movies:[], updatedAt:0 };
   renderAll();
   toast("Her şey sıfırlandı — temiz sayfa ✓");
 });
@@ -1216,8 +1395,9 @@ if("serviceWorker" in navigator && (location.protocol === "https:" || location.h
 }
 
 /* ---------- başlat ---------- */
+updateSyncBadge();
 renderAll();
-refreshAll(false);
+initialSync().then(()=> refreshAll(false));
 </script>
 </body>
 </html>
