@@ -427,6 +427,7 @@
       <input type="text" id="search-input" placeholder="Dizi veya anime ara…">
       <button id="search-btn">Ara</button>
     </div>
+    <div id="movie-config"></div>
     <div class="result-list" id="search-results"></div>
     <p class="hint" id="search-hint">
       Dizi ve anime bilgileri TVmaze'den, filmler iTunes arşivinden gelir — ikisi de ücretsizdir ve hesap gerektirmez.
@@ -478,6 +479,8 @@ const API = "https://api.tvmaze.com";
 const STORE_KEY = "bolumDefteri.v2";
 const OLD_KEY = "bolumDefteri.v1";
 const SYNC_KEY = "bolumDefteri.sync";
+const TMDB_KEY_STORE = "bolumDefteri.tmdb";
+let tmdbKey = localStorage.getItem(TMDB_KEY_STORE) || "";
 const CACHE_TTL = 12 * 60 * 60 * 1000;
 const DEFAULT_EP_MIN = 30;
 
@@ -504,6 +507,7 @@ function sanitizeState(s){
     out.movies.push({
       id:m.id || ("m" + Date.now() + Math.floor(Math.random()*1e4)),
       itunesId:m.itunesId || null,
+      tmdbId:m.tmdbId || null,
       source:m.source || "manual",
       title:m.title, year:m.year || "",
       poster:m.poster || null, runtime:m.runtime || null,
@@ -673,7 +677,68 @@ async function refreshAll(manual){
   if(manual) toast("Hepsi güncel ✓");
 }
 
-/* ---------- iTunes (film) — JSONP, anahtarsız ---------- */
+/* ---------- TMDB (film) — ücretsiz anahtarla, Türkçe veri ---------- */
+function renderMovieConfig(){
+  const box = $("#movie-config");
+  if(!box) return;
+  if(searchSrc !== "movie"){ box.innerHTML = ""; return; }
+  if(tmdbKey){
+    box.innerHTML = `<p class="hint" style="margin:0 0 12px">Film kaynağı: <b>TMDB ✓</b> ·
+      <button class="link-btn" onclick="changeTmdbKey()">anahtarı değiştir</button></p>`;
+  }else{
+    box.innerHTML = `<div class="field" style="margin-bottom:14px">
+      <label>TMDB API anahtarı (isteğe bağlı)</label>
+      <input id="tmdb-key" placeholder="anahtarı buraya yapıştır" autocapitalize="off" autocorrect="off" spellcheck="false">
+      <p class="hint" style="margin-top:8px">Film araması normalde iTunes'tan yapılır; erişilemiyorsa TMDB'ye geçebilirsin.
+      Ücretsiz anahtar: <b>themoviedb.org</b>'da hesap aç → Ayarlar → API → <b>API Key (v3 auth)</b>.
+      Anahtar yalnızca bu cihazda saklanır. <button class="link-btn" onclick="saveTmdbKey()">Kaydet</button></p>
+    </div>`;
+  }
+}
+function saveTmdbKey(){
+  const v = $("#tmdb-key").value.trim();
+  if(!v){ toast("Anahtar boş görünüyor."); return; }
+  tmdbKey = v;
+  localStorage.setItem(TMDB_KEY_STORE, v);
+  renderMovieConfig();
+  toast("TMDB bağlandı ✓ — şimdi bir film ara.");
+}
+function changeTmdbKey(){
+  tmdbKey = "";
+  localStorage.removeItem(TMDB_KEY_STORE);
+  renderMovieConfig();
+}
+async function tmdbSearch(q){
+  const res = await fetch("https://api.themoviedb.org/3/search/movie?include_adult=false&language=tr-TR"
+    + "&api_key=" + encodeURIComponent(tmdbKey) + "&query=" + encodeURIComponent(q));
+  if(res.status === 401) throw new Error("tmdb-401");
+  if(!res.ok) throw new Error("tmdb-" + res.status);
+  const data = await res.json();
+  return (data.results || []).slice(0, 20).map(r => ({
+    tmdbId:r.id,
+    title:r.title || r.original_title,
+    year:r.release_date ? r.release_date.slice(0,4) : "",
+    poster:r.poster_path ? "https://image.tmdb.org/t/p/w342" + r.poster_path : null,
+    runtime:null, genre:"", desc:r.overview || ""
+  }));
+}
+/* Eklendikten sonra süre ve tür bilgisini arka planda tamamla */
+async function enrichTmdbMovie(movieId, tmdbId){
+  try{
+    const res = await fetch("https://api.themoviedb.org/3/movie/" + tmdbId
+      + "?language=tr-TR&api_key=" + encodeURIComponent(tmdbKey));
+    if(!res.ok) return;
+    const d = await res.json();
+    const m = state.movies.find(x => x.id === movieId);
+    if(!m) return;
+    if(d.runtime) m.runtime = d.runtime;
+    const g = (d.genres || []).map(x => x.name).slice(0,2).join(", ");
+    if(g) m.genre = g;
+    saveState(); renderLibrary(); renderStats();
+  }catch(e){ /* zenginleştirme başarısızsa film yine de listede kalır */ }
+}
+
+/* ---------- iTunes (film) — anahtar yoksa yedek kaynak ---------- */
 function jsonp(url){
   return new Promise((resolve, reject) => {
     const cb = "__jp" + Date.now() + Math.floor(Math.random()*1e4);
@@ -685,16 +750,25 @@ function jsonp(url){
     document.head.appendChild(s);
   });
 }
-async function searchMovies(q){
-  const fromStore = async country => {
-    const url = "https://itunes.apple.com/search?media=movie&limit=20&country=" + country + "&term=" + encodeURIComponent(q);
-    const data = await jsonp(url);
+async function itunesQuery(country, q){
+  const url = "https://itunes.apple.com/search?media=movie&limit=20&country=" + country + "&term=" + encodeURIComponent(q);
+  try{
+    const res = await fetch(url); // birincil yol: doğrudan istek (iTunes CORS destekliyor)
+    if(!res.ok) throw new Error("itunes-" + res.status);
+    const data = await res.json();
     return data.results || [];
-  };
+  }catch(e){
+    console.warn("fetch olmadı, JSONP deneniyor:", e);
+    const data = await jsonp(url); // yedek yol
+    return data.results || [];
+  }
+}
+async function searchMovies(q){
+  if(tmdbKey) return tmdbSearch(q); // anahtar varsa TMDB birincil kaynak
   let raw = [];
-  try{ raw = await fromStore("TR"); }
+  try{ raw = await itunesQuery("TR", q); }
   catch(e){ console.warn("TR mağazası yanıt vermedi:", e); }
-  if(!raw.length) raw = await fromStore("US"); // TR boş dönerse dünya kataloğuna bak
+  if(!raw.length) raw = await itunesQuery("US", q); // TR boş/erişilemez ise dünya kataloğu
   return raw.map(r => ({
     itunesId:r.trackId,
     title:r.trackName,
@@ -706,14 +780,20 @@ async function searchMovies(q){
   }));
 }
 function addMovieFromSearch(m){
-  if(state.movies.some(x => x.itunesId && x.itunesId === m.itunesId)){ toast("Zaten listende."); return; }
+  const dup = state.movies.some(x =>
+    (m.itunesId && x.itunesId && x.itunesId === m.itunesId) ||
+    (m.tmdbId && x.tmdbId && x.tmdbId === m.tmdbId));
+  if(dup){ toast("Zaten listende."); return; }
+  const id = "m" + Date.now();
   state.movies.push({
-    id:"m" + Date.now(), itunesId:m.itunesId, source:"itunes",
+    id, itunesId:m.itunesId || null, tmdbId:m.tmdbId || null,
+    source:m.tmdbId ? "tmdb" : "itunes",
     title:m.title, year:m.year, poster:m.poster, runtime:m.runtime,
     genre:m.genre, desc:m.desc, watched:false, fav:false, addedAt:Date.now()
   });
   saveState(); renderAll();
   toast(m.title + " → Filmler ✓");
+  if(m.tmdbId && tmdbKey) enrichTmdbMovie(id, m.tmdbId);
 }
 function addMovieManual(){
   const title = prompt("Film adı:");
@@ -1050,7 +1130,9 @@ async function doSearch(){
         return;
       }
       box.innerHTML = results.map((m, i) => {
-        const inList = state.movies.some(x => x.itunesId && x.itunesId === m.itunesId);
+        const inList = state.movies.some(x =>
+          (m.itunesId && x.itunesId && x.itunesId === m.itunesId) ||
+          (m.tmdbId && x.tmdbId && x.tmdbId === m.tmdbId));
         const img = m.poster
           ? `<img src="${esc(m.poster.replace("400x400","200x200"))}" alt="" loading="lazy">`
           : `<div class="thumb-fb">görsel yok</div>`;
@@ -1069,7 +1151,15 @@ async function doSearch(){
     }
   }catch(e){
     console.error(e);
-    box.innerHTML = `<p class="hint">Arama başarısız — bağlantını kontrol edip tekrar dene.</p>`;
+    const em = String(e.message || "");
+    box.innerHTML = searchSrc === "movie"
+      ? (em.includes("tmdb-401")
+        ? `<p class="hint">TMDB anahtarı geçersiz görünüyor — yukarıdan
+           <button class="link-btn" onclick="changeTmdbKey()">anahtarı değiştirip</button> tekrar dene.</p>`
+        : `<p class="hint">Film araması başarısız — cihazında ya da ağında film kaynağı engelleniyor olabilir
+           (reklam engelleyici, Private DNS, VPN). Yukarıdan TMDB anahtarı bağlamayı ya da
+           <button class="link-btn" onclick="addMovieManual()">filmi elle eklemeyi</button> deneyebilirsin.</p>`)
+      : `<p class="hint">Arama başarısız — bağlantını kontrol edip tekrar dene.</p>`;
   }
 }
 
@@ -1536,6 +1626,7 @@ function setSearchSrc(src){
   document.querySelectorAll("#panel-add .seg button").forEach(b => b.classList.toggle("active", b.dataset.src === src));
   $("#search-input").placeholder = src === "tv" ? "Dizi veya anime ara…" : "Film ara…";
   $("#search-results").innerHTML = "";
+  renderMovieConfig();
 }
 function renderAll(){ renderLibrary(); renderUpcoming(); renderStats(); }
 
