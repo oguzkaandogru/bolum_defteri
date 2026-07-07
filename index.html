@@ -1174,7 +1174,14 @@ function loadSync(){
 function saveSync(){ localStorage.setItem(SYNC_KEY, JSON.stringify(sync)); }
 function syncReady(){ return !!(sync.token && sync.repo && /^[\w.-]+\/[\w.-]+$/.test(sync.repo)); }
 
-const b64encode = str => btoa(String.fromCharCode(...new TextEncoder().encode(str)));
+const b64encode = str => {
+  const bytes = new TextEncoder().encode(str);
+  let bin = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  }
+  return btoa(bin);
+};
 const b64decode = str => new TextDecoder().decode(Uint8Array.from(atob(str.replace(/\s/g,"")), c => c.charCodeAt(0)));
 
 function ghUrl(){ return "https://api.github.com/repos/" + sync.repo + "/contents/veri.json"; }
