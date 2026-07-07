@@ -332,6 +332,18 @@
   .ep-name.future{color:var(--muted); font-style:italic;}
   .ep-date{font-family:var(--font-mono); font-size:10px; color:var(--muted); flex-shrink:0;}
   .ep-date.future{color:var(--gold);}
+  .ep-redo{
+    background:none; border:1px solid var(--line); color:var(--muted);
+    width:26px; height:26px; border-radius:8px; font-size:14px; line-height:1;
+    flex-shrink:0; display:flex; align-items:center; justify-content:center;
+    transition:color .12s, border-color .12s;
+  }
+  @media (hover:hover){ .ep-redo:hover{color:var(--gold); border-color:var(--gold-deep);} }
+  .ep-times{
+    font-family:var(--font-mono); font-size:9.5px; font-weight:600; color:var(--gold);
+    background:rgba(232,180,74,.14); border:none; padding:2px 6px; border-radius:6px;
+    flex-shrink:0; cursor:pointer;
+  }
   .movie-modal-body{padding:6px 20px 24px; color:var(--muted); font-size:13.5px; line-height:1.6;}
 
   /* ---------- senkron ayarları ---------- */
@@ -484,6 +496,7 @@ function sanitizeState(s){
     if(typeof sh.dropped !== "boolean") sh.dropped = false;
     if(typeof sh.fav !== "boolean") sh.fav = false;
     sh.watched = sh.watched || {};
+    sh.rewatch = sh.rewatch || {}; // { epId: [zaman1, zaman2, ...] } — tekrar izlemeler
     out.shows[sh.id] = sh;
   });
   (s.movies || []).forEach(m => {
@@ -747,6 +760,8 @@ function lastActivity(show){
   let t = 0;
   const w = show.watched || {};
   for(const k in w){ if(typeof w[k] === "number" && w[k] > t) t = w[k]; }
+  const r = show.rewatch || {};
+  for(const k in r){ (r[k] || []).forEach(v => { if(typeof v === "number" && v > t) t = v; }); }
   return t || show.addedAt || 0;
 }
 
@@ -889,9 +904,10 @@ function renderStats(){
     (s.cache?.episodes || []).forEach(ep => {
       if(s.watched[ep.id]){
         const min = epMinutes(s, ep);
-        epCount++; epMin += min;
-        kindMin[s.kind] = (kindMin[s.kind] || 0) + min;
-        (s.genres || []).forEach(g => { if(g !== "Anime") genreMin[g] = (genreMin[g] || 0) + min; });
+        const times = 1 + (s.rewatch?.[ep.id]?.length || 0); // her izleyiş bağımsız sayılır
+        epCount += times; epMin += min * times;
+        kindMin[s.kind] = (kindMin[s.kind] || 0) + min * times;
+        (s.genres || []).forEach(g => { if(g !== "Anime") genreMin[g] = (genreMin[g] || 0) + min * times; });
       }
     });
   });
@@ -912,6 +928,9 @@ function renderStats(){
   const stamps = [];
   Object.values(state.shows).forEach(s => {
     Object.values(s.watched || {}).forEach(v => { if(typeof v === "number") stamps.push(v); });
+    Object.values(s.rewatch || {}).forEach(arr => {
+      (arr || []).forEach(v => { if(typeof v === "number") stamps.push(v); });
+    });
   });
   const now = new Date();
   const today0 = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
@@ -1132,12 +1151,15 @@ function renderShowModal(keepOpen){
             ${list.map(ep => {
               const aired = isAired(ep);
               const on = !!show.watched[ep.id];
+              const rw = (show.rewatch?.[ep.id] || []).length;
               return `<div class="ep-row">
                 <button class="ep-check${on?' on':''}" ${aired?"":"disabled style='opacity:.3;cursor:default;'"}
                         onclick="toggleEp(${show.id},${ep.id})" aria-label="${on?'İzlenmedi yap':'İzlendi işaretle'}">✓</button>
                 <span class="ep-code">${epCode(ep)}</span>
+                ${on && rw ? `<button class="ep-times" onclick="undoRewatch(${show.id},${ep.id})" title="Son tekrarı geri al">${rw+1}×</button>` : ""}
                 <span class="ep-name${aired?'':' future'}">${esc(ep.name || "")}</span>
                 <span class="ep-date${aired?'':' future'}">${esc(fmtDate(ep.airdate))}</span>
+                ${on ? `<button class="ep-redo" onclick="addRewatch(${show.id},${ep.id})" title="Tekrar izledim" aria-label="Tekrar izledim">↻</button>` : ""}
               </div>`;
             }).join("")}
           </div>
@@ -1183,11 +1205,38 @@ function toggleSeason(btn){ btn.parentElement.classList.toggle("open"); }
 function toggleEp(showId, epId){
   const show = state.shows[showId];
   if(!show) return;
-  if(show.watched[epId]) delete show.watched[epId];
+  if(show.watched[epId]){
+    const rw = show.rewatch?.[epId]?.length || 0;
+    if(rw && !confirm("Bu bölümün " + rw + " tekrar izleme kaydı da silinecek. İşareti kaldırmak istiyor musun?")) return;
+    delete show.watched[epId];
+    if(show.rewatch) delete show.rewatch[epId];
+  }
   else show.watched[epId] = Date.now();
   saveState();
   renderShowModal(currentOpenSeasons());
   renderLibrary(); renderUpcoming(); renderStats();
+}
+function addRewatch(showId, epId){
+  const show = state.shows[showId];
+  if(!show || !show.watched[epId]) return;
+  show.rewatch = show.rewatch || {};
+  (show.rewatch[epId] = show.rewatch[epId] || []).push(Date.now());
+  saveState();
+  renderShowModal(currentOpenSeasons());
+  renderStats();
+  toast("Tekrar izleme eklendi ↻ " + (show.rewatch[epId].length + 1) + "×");
+}
+function undoRewatch(showId, epId){
+  const show = state.shows[showId];
+  const arr = show.rewatch?.[epId];
+  if(!arr || !arr.length) return;
+  if(!confirm("Son tekrar izleme geri alınsın mı?")) return;
+  arr.pop();
+  if(!arr.length) delete show.rewatch[epId];
+  saveState();
+  renderShowModal(currentOpenSeasons());
+  renderStats();
+  toast("Son tekrar geri alındı.");
 }
 function markSeason(showId, sn){
   const show = state.shows[showId];
