@@ -234,6 +234,12 @@
     padding:16px 18px; margin-top:12px;
   }
   .stat-section h3{font-family:var(--font-display); font-weight:600; font-size:15px; margin-bottom:4px;}
+  .chart-sub{font-family:var(--font-mono); font-size:11px; color:var(--muted); font-weight:400; margin-left:6px;}
+  .chart{display:flex; align-items:flex-end; gap:3px; height:92px; margin-top:12px;}
+  .chart .c-col{flex:1; height:100%; display:flex; align-items:flex-end; border-radius:3px;}
+  .chart .c-col i{display:block; width:100%; background:var(--gold); border-radius:3px 3px 0 0; min-height:0;}
+  .chart-axis{display:flex; justify-content:space-between; margin-top:6px;
+    font-family:var(--font-mono); font-size:9.5px; color:var(--muted); letter-spacing:.5px;}
 
   /* ---------- bottom nav ---------- */
   .bottom-nav{
@@ -257,25 +263,26 @@
   /* ---------- modal ---------- */
   .modal-backdrop{
     position:fixed; inset:0; background:rgba(5,7,11,.82); z-index:50;
-    display:none; align-items:flex-end; justify-content:center;
+    display:none; align-items:center; justify-content:center;
+    padding:14px 14px calc(14px + env(safe-area-inset-bottom));
   }
-  @media (min-width:640px){ .modal-backdrop{align-items:flex-start; padding:40px 16px; overflow-y:auto;} }
+  @media (min-width:640px){ .modal-backdrop{padding:36px 16px;} }
   .modal-backdrop.open{display:flex;}
   .modal{
     background:var(--surface); border:1px solid var(--line);
-    border-radius:20px 20px 0 0; width:100%; max-width:620px;
-    max-height:88vh; overflow-y:auto; overscroll-behavior:contain;
+    border-radius:20px; width:100%; max-width:620px;
+    max-height:100%; overflow-y:auto; overscroll-behavior:contain;
+    box-shadow:0 24px 70px rgba(0,0,0,.55);
   }
-  @media (min-width:640px){ .modal{border-radius:20px; max-height:none;} }
-  .modal-hero{position:relative; height:150px; overflow:hidden;}
+  .modal-hero{position:relative; height:104px; overflow:hidden; border-radius:20px 20px 0 0;}
   .modal-hero img{width:100%; height:100%; object-fit:cover; filter:brightness(.55) saturate(1.1); transform:scale(1.06);}
   .modal-hero .fade{position:absolute; inset:0; background:linear-gradient(to top, var(--surface) 4%, transparent 70%);}
-  .modal-head{display:flex; gap:16px; padding:0 20px 16px; margin-top:-58px; position:relative;}
+  .modal-head{display:flex; gap:16px; padding:0 20px 14px; margin-top:-52px; position:relative;}
   .modal-head img, .modal-head .thumb-fb{
-    width:88px; height:126px; border-radius:12px; object-fit:cover; flex-shrink:0;
+    width:84px; height:120px; border-radius:12px; object-fit:cover; flex-shrink:0;
     border:1px solid var(--line); box-shadow:0 10px 30px rgba(0,0,0,.5);
   }
-  .modal-head .mh-body{padding-top:52px; min-width:0;}
+  .modal-head .mh-body{padding-top:46px; min-width:0;}
   .modal-head h2{font-family:var(--font-display); font-weight:800; font-size:20px; line-height:1.15;}
   .modal-head .sub{color:var(--muted); font-size:12.5px; margin-top:4px;}
   .modal-head .stats{font-family:var(--font-mono); font-size:11.5px; color:var(--gold); margin-top:8px; line-height:1.6;}
@@ -294,6 +301,7 @@
   }
   .tool-btn.gold{background:var(--gold); border-color:var(--gold); color:#221703; font-weight:700;}
   .tool-btn.danger{color:var(--hot);}
+  .tool-btn.fav-on{color:var(--hot); border-color:rgba(255,107,94,.55);}
   .season-block{border-bottom:1px solid var(--line);}
   .season-head{
     width:100%; display:flex; align-items:center; justify-content:space-between; gap:10px;
@@ -348,8 +356,8 @@
 
   /* ---------- toast ---------- */
   #toast{
-    position:fixed; bottom:calc(var(--nav-h) + env(safe-area-inset-bottom) + 16px);
-    left:50%; transform:translateX(-50%) translateY(90px);
+    position:fixed; top:calc(env(safe-area-inset-top) + 12px);
+    left:50%; transform:translateX(-50%) translateY(-110px);
     background:var(--surface-2); border:1px solid var(--line); color:var(--text);
     padding:11px 20px; border-radius:12px; font-size:13.5px; font-weight:500;
     z-index:99; transition:transform .25s; box-shadow:0 8px 30px rgba(0,0,0,.45);
@@ -474,6 +482,7 @@ function sanitizeState(s){
     if(!sh || sh.id == null) return;
     if(!sh.kind) sh.kind = (sh.genres || []).includes("Anime") ? "anime" : "dizi";
     if(typeof sh.dropped !== "boolean") sh.dropped = false;
+    if(typeof sh.fav !== "boolean") sh.fav = false;
     sh.watched = sh.watched || {};
     out.shows[sh.id] = sh;
   });
@@ -486,7 +495,7 @@ function sanitizeState(s){
       title:m.title, year:m.year || "",
       poster:m.poster || null, runtime:m.runtime || null,
       genre:m.genre || "", desc:m.desc || "",
-      watched:!!m.watched, addedAt:m.addedAt || Date.now()
+      watched:!!m.watched, fav:!!m.fav, addedAt:m.addedAt || Date.now()
     });
   });
   return out;
@@ -530,7 +539,7 @@ function toast(msg){
   const t = $("#toast");
   t.textContent = msg; t.classList.add("show");
   clearTimeout(t._timer);
-  t._timer = setTimeout(()=> t.classList.remove("show"), 2600);
+  t._timer = setTimeout(()=> t.classList.remove("show"), 2200);
 }
 function fmtDate(iso){
   if(!iso) return "";
@@ -560,6 +569,14 @@ function fmtDuration(totalMin){
   const m = Math.round(totalMin % 60);
   if(d > 0) return d + " gün " + h + " sa";
   if(h > 0) return h + " sa " + m + " dk";
+  return m + " dk";
+}
+function fmtDurationShort(totalMin){
+  const d = Math.floor(totalMin / 1440);
+  const h = Math.floor((totalMin % 1440) / 60);
+  const m = Math.round(totalMin % 60);
+  if(d > 0) return d + "g " + h + "s";
+  if(h > 0) return h + "s " + m + "d";
   return m + " dk";
 }
 
@@ -605,6 +622,7 @@ async function addShow(showId, name){
       ...b.info,
       kind:(b.info.genres || []).includes("Anime") ? "anime" : "dizi",
       dropped:false,
+      fav:false,
       watched:{},
       addedAt:Date.now(),
       cache:{ episodes:b.episodes, nextEpisode:b.nextEpisode, fetchedAt:b.fetchedAt }
@@ -672,7 +690,7 @@ function addMovieFromSearch(m){
   state.movies.push({
     id:"m" + Date.now(), itunesId:m.itunesId, source:"itunes",
     title:m.title, year:m.year, poster:m.poster, runtime:m.runtime,
-    genre:m.genre, desc:m.desc, watched:false, addedAt:Date.now()
+    genre:m.genre, desc:m.desc, watched:false, fav:false, addedAt:Date.now()
   });
   saveState(); renderAll();
   toast(m.title + " → Filmler ✓");
@@ -683,7 +701,7 @@ function addMovieManual(){
   const year = prompt("Yılı (boş bırakabilirsin):") || "";
   state.movies.push({
     id:"m" + Date.now(), source:"manual", title:title.trim(), year:year.trim(),
-    poster:null, runtime:null, genre:"", desc:"", watched:false, addedAt:Date.now()
+    poster:null, runtime:null, genre:"", desc:"", watched:false, fav:false, addedAt:Date.now()
   });
   saveState(); renderAll();
   toast("Film eklendi ✓");
@@ -716,12 +734,21 @@ function epMinutes(show, ep){
 
 /* ---------- render: kitaplık ---------- */
 const GROUPS = [
+  ["fav",       "Favoriler ♥"],
   ["devam",     "İzlemeye devam"],
   ["guncel",    "Güncel — yeni bölüm bekliyor"],
   ["izlenecek", "İzlenecekler"],
   ["bitti",     "Bitirdiklerin"],
   ["birakilan", "Bırakılanlar"]
 ];
+
+/* Son bölüm işaretleme zamanı — "İzlemeye devam" sıralaması için */
+function lastActivity(show){
+  let t = 0;
+  const w = show.watched || {};
+  for(const k in w){ if(typeof w[k] === "number" && w[k] > t) t = w[k]; }
+  return t || show.addedAt || 0;
+}
 
 function showCard(s){
   const p = showProgress(s);
@@ -779,7 +806,9 @@ function renderLibrary(){
         <br><button onclick="goAdd('movie')">Film ekle</button></div>`;
       return;
     }
+    const favs = state.movies.filter(m => m.fav).sort((a,b)=>a.title.localeCompare(b.title,"tr"));
     let html = "";
+    if(favs.length) html += `<div class="group-label">Favoriler ♥ <b>${favs.length}</b></div><div class="grid">${favs.map(movieCard).join("")}</div>`;
     if(toWatch.length) html += `<div class="group-label">İzlenecekler <b>${toWatch.length}</b></div><div class="grid">${toWatch.map(movieCard).join("")}</div>`;
     if(watched.length) html += `<div class="group-label">İzlendi <b>${watched.length}</b></div><div class="grid">${watched.map(movieCard).join("")}</div>`;
     box.innerHTML = html;
@@ -794,14 +823,18 @@ function renderLibrary(){
       <br><button onclick="goAdd('tv')">${activeCat === "anime" ? "Anime" : "Dizi"} ekle</button></div>`;
     return;
   }
-  const buckets = { devam:[], guncel:[], izlenecek:[], bitti:[], birakilan:[] };
-  shows.forEach(s => { s.dropped ? buckets.birakilan.push(s) : buckets[showStatus(s)].push(s); });
+  const buckets = { fav:[], devam:[], guncel:[], izlenecek:[], bitti:[], birakilan:[] };
+  shows.forEach(s => {
+    if(s.fav) buckets.fav.push(s);
+    s.dropped ? buckets.birakilan.push(s) : buckets[showStatus(s)].push(s);
+  });
   const byName = (a,b)=>a.name.localeCompare(b.name,"tr");
+  const byRecent = (a,b)=>lastActivity(b)-lastActivity(a);
   let html = "";
   GROUPS.forEach(([key, label]) => {
     const list = buckets[key];
     if(!list.length) return;
-    list.sort(byName);
+    list.sort(key === "devam" ? byRecent : byName);
     html += `<div class="group-label">${label} <b>${list.length}</b></div>
              <div class="grid">${list.map(showCard).join("")}</div>`;
   });
@@ -875,6 +908,44 @@ function renderStats(){
   const topGenres = Object.entries(genreMin).sort((a,b)=>b[1]-a[1]).slice(0,5);
   const maxG = topGenres.length ? topGenres[0][1] : 1;
 
+  /* İşaretleme zaman damgalarından: son 30 gün, bu yıl, en uzun seri */
+  const stamps = [];
+  Object.values(state.shows).forEach(s => {
+    Object.values(s.watched || {}).forEach(v => { if(typeof v === "number") stamps.push(v); });
+  });
+  const now = new Date();
+  const today0 = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const start30 = today0 - 29 * 86400000;
+  const days = new Array(30).fill(0);
+  let thisYear = 0;
+  const daySet = new Set();
+  const yearStart = new Date(now.getFullYear(), 0, 1).getTime();
+  stamps.forEach(t => {
+    if(t >= yearStart) thisYear++;
+    daySet.add(Math.floor(t / 86400000));
+    if(t >= start30){
+      const i = Math.min(29, Math.floor((t - start30) / 86400000));
+      days[i]++;
+    }
+  });
+  let streak = 0, run = 0, prev = null;
+  [...daySet].sort((a,b)=>a-b).forEach(d => {
+    run = (prev !== null && d === prev + 1) ? run + 1 : 1;
+    if(run > streak) streak = run;
+    prev = d;
+  });
+  const last30Total = days.reduce((a,b)=>a+b,0);
+  const maxDay = Math.max(...days, 1);
+  const chart = `<div class="stat-section">
+      <h3>Son 30 gün <span class="chart-sub">${last30Total} bölüm</span></h3>
+      <div class="chart">${days.map((n,i)=>{
+        const d = new Date(start30 + i*86400000);
+        const lbl = d.toLocaleDateString("tr-TR",{day:"numeric",month:"short"});
+        return `<div class="c-col" title="${lbl}: ${n} bölüm"><i style="height:${n ? Math.max(6, Math.round(n/maxDay*100)) : 0}%"></i></div>`;
+      }).join("")}</div>
+      <div class="chart-axis"><span>30 gün önce</span><span>bugün</span></div>
+    </div>`;
+
   box.innerHTML = `
     <div class="stat-hero">
       <div class="label">Toplam ekran süresi</div>
@@ -883,28 +954,36 @@ function renderStats(){
     </div>
     <div class="stat-grid">
       <div class="stat-box"><div class="label">Dizi</div>
-        <div class="value">${fmtDuration(kindMin.dizi || 0)}</div>
+        <div class="value">${fmtDurationShort(kindMin.dizi || 0)}</div>
         <div class="sub">${Object.values(state.shows).filter(s=>s.kind==="dizi").length} dizi takipte</div></div>
       <div class="stat-box"><div class="label">Anime</div>
-        <div class="value">${fmtDuration(kindMin.anime || 0)}</div>
+        <div class="value">${fmtDurationShort(kindMin.anime || 0)}</div>
         <div class="sub">${Object.values(state.shows).filter(s=>s.kind==="anime").length} anime takipte</div></div>
       <div class="stat-box"><div class="label">Film</div>
-        <div class="value">${fmtDuration(movieMin)}</div>
+        <div class="value">${fmtDurationShort(movieMin)}</div>
         <div class="sub">${wMovies.length} film izlendi</div></div>
       <div class="stat-box"><div class="label">Bölüm</div>
         <div class="value">${epCount}</div>
         <div class="sub">işaretlenen bölüm</div></div>
+      <div class="stat-box"><div class="label">Bu yıl</div>
+        <div class="value">${thisYear}</div>
+        <div class="sub">${now.getFullYear()}'te işaretlenen</div></div>
+      <div class="stat-box"><div class="label">En uzun seri</div>
+        <div class="value">${streak} gün</div>
+        <div class="sub">aralıksız izleme</div></div>
     </div>
+    ${chart}
     ${topGenres.length ? `<div class="stat-section">
       <h3>En çok izlediğin türler</h3>
       ${topGenres.map(([g, min]) => `
         <div class="genre-row">
           <span class="g-name">${esc(g)}</span>
           <span class="g-bar"><i style="width:${Math.round(min/maxG*100)}%"></i></span>
-          <span class="g-val">${fmtDuration(min)}</span>
+          <span class="g-val">${fmtDurationShort(min)}</span>
         </div>`).join("")}
     </div>` : ""}
-    <p class="hint">Süreler bölümlerin gerçek uzunluklarından hesaplanır; süresi bilinmeyen bölümler için dizinin ortalaması kullanılır.</p>`;
+    <p class="hint">Süreler bölümlerin gerçek uzunluklarından hesaplanır; süresi bilinmeyen bölümler için dizinin ortalaması kullanılır.
+    Grafik ve seri, bölümü <b>işaretlediğin</b> güne göre sayar — toplu işaretlemeler o günde tek çubuk olarak yığılır.</p>`;
 }
 
 /* ---------- arama ---------- */
@@ -1002,8 +1081,7 @@ function renderShowModal(keepOpen){
   const seasonNums = Object.keys(seasons).map(Number).sort((a,b)=>a-b);
   if(!keepOpen){
     const nx = nextToWatch(show);
-    if(nx) openSeasons.add(nx.season);
-    else if(seasonNums.length) openSeasons.add(seasonNums[seasonNums.length-1]);
+    if(nx) openSeasons.add(nx.season); // yarım kalan sezon açık gelir, gerisi kapalı
   }
 
   const nxEp = show.cache?.nextEpisode;
@@ -1016,7 +1094,7 @@ function renderShowModal(keepOpen){
   const hero = show.image ? `<img src="${esc(show.image.replace('medium','original'))}" alt="">` : "";
   const poster = show.image
     ? `<img src="${esc(show.image)}" alt="">`
-    : `<div class="thumb-fb" style="width:88px;height:126px;border-radius:12px;">görsel yok</div>`;
+    : `<div class="thumb-fb" style="width:84px;height:120px;border-radius:12px;">görsel yok</div>`;
 
   $("#modal").innerHTML = `
     <button class="modal-close" onclick="closeModal()" aria-label="Kapat">✕</button>
@@ -1031,6 +1109,7 @@ function renderShowModal(keepOpen){
     </div>
     <div class="modal-toolbar">
       <button class="tool-btn gold" onclick="markAllAired(${show.id})">Hepsini izledim</button>
+      <button class="tool-btn${show.fav ? " fav-on" : ""}" onclick="toggleFavShow(${show.id})">${show.fav ? "♥ Favoride" : "♡ Favorile"}</button>
       <button class="tool-btn" onclick="toggleDropped(${show.id})">${show.dropped ? "Tekrar takip et" : "Bıraktım"}</button>
       <button class="tool-btn" onclick="switchKind(${show.id})">${show.kind === "anime" ? "Dizilere taşı" : "Anime'ye taşı"}</button>
       <button class="tool-btn danger" onclick="removeShow(${show.id})">Sil</button>
@@ -1074,7 +1153,7 @@ function renderMovieModal(){
   const hero = m.poster ? `<img src="${esc(m.poster)}" alt="">` : "";
   const poster = m.poster
     ? `<img src="${esc(m.poster)}" alt="">`
-    : `<div class="thumb-fb" style="width:88px;height:126px;border-radius:12px;">görsel yok</div>`;
+    : `<div class="thumb-fb" style="width:84px;height:120px;border-radius:12px;">görsel yok</div>`;
   $("#modal").innerHTML = `
     <button class="modal-close" onclick="closeModal()" aria-label="Kapat">✕</button>
     <div class="modal-hero">${hero}<div class="fade"></div></div>
@@ -1088,6 +1167,7 @@ function renderMovieModal(){
     </div>
     <div class="modal-toolbar">
       <button class="tool-btn gold" onclick="toggleMovieWatched('${m.id}')">${m.watched ? "İzlenmedi yap" : "İzledim ✓"}</button>
+      <button class="tool-btn${m.fav ? " fav-on" : ""}" onclick="toggleFavMovie('${m.id}')">${m.fav ? "♥ Favoride" : "♡ Favorile"}</button>
       <button class="tool-btn danger" onclick="removeMovie('${m.id}')">Sil</button>
     </div>
     ${m.desc ? `<div class="movie-modal-body">${esc(m.desc)}</div>` : `<div style="height:14px"></div>`}`;
@@ -1124,6 +1204,24 @@ function markAllAired(showId){
   renderShowModal(currentOpenSeasons());
   renderLibrary(); renderUpcoming(); renderStats();
   toast("Yayınlanan her şey işaretlendi ✓");
+}
+function toggleFavShow(showId){
+  const show = state.shows[showId];
+  if(!show) return;
+  show.fav = !show.fav;
+  saveState();
+  renderShowModal(currentOpenSeasons());
+  renderLibrary();
+  toast(show.fav ? "Favorilere eklendi ♥" : "Favorilerden çıkarıldı.");
+}
+function toggleFavMovie(id){
+  const m = state.movies.find(x => x.id === id);
+  if(!m) return;
+  m.fav = !m.fav;
+  saveState();
+  renderMovieModal();
+  renderLibrary();
+  toast(m.fav ? "Favorilere eklendi ♥" : "Favorilerden çıkarıldı.");
 }
 function toggleDropped(showId){
   const show = state.shows[showId];
