@@ -686,9 +686,16 @@ function jsonp(url){
   });
 }
 async function searchMovies(q){
-  const url = "https://itunes.apple.com/search?media=movie&limit=20&country=TR&term=" + encodeURIComponent(q);
-  const data = await jsonp(url);
-  return (data.results || []).map(r => ({
+  const fromStore = async country => {
+    const url = "https://itunes.apple.com/search?media=movie&limit=20&country=" + country + "&term=" + encodeURIComponent(q);
+    const data = await jsonp(url);
+    return data.results || [];
+  };
+  let raw = [];
+  try{ raw = await fromStore("TR"); }
+  catch(e){ console.warn("TR mağazası yanıt vermedi:", e); }
+  if(!raw.length) raw = await fromStore("US"); // TR boş dönerse dünya kataloğuna bak
+  return raw.map(r => ({
     itunesId:r.trackId,
     title:r.trackName,
     year:r.releaseDate ? r.releaseDate.slice(0,4) : "",
@@ -1144,6 +1151,7 @@ function renderShowModal(keepOpen){
             <span>${sn}. Sezon</span>
             <span class="s-right">
               <span class="s-prog${full?' full':''}">${w}/${airedL.length}${airedL.length<list.length ? " · " + (list.length-airedL.length) + " yolda" : ""}</span>
+              ${w > 0 ? `<span class="season-mark" onclick="event.stopPropagation();rewatchSeason(${show.id},${sn})" role="button" title="Sezonu tekrar izledim">↻</span>` : ""}
               <span class="season-mark" onclick="event.stopPropagation();markSeason(${show.id},${sn})" role="button">✓ tümü</span>
             </span>
           </button>
@@ -1225,6 +1233,20 @@ function addRewatch(showId, epId){
   renderShowModal(currentOpenSeasons());
   renderStats();
   toast("Tekrar izleme eklendi ↻ " + (show.rewatch[epId].length + 1) + "×");
+}
+function rewatchSeason(showId, sn){
+  const show = state.shows[showId];
+  if(!show) return;
+  const eps = (show.cache?.episodes || []).filter(ep => ep.season === sn && show.watched[ep.id]);
+  if(!eps.length){ toast("Bu sezonda izlenmiş bölüm yok — önce ✓ tümü ile işaretle."); return; }
+  if(!confirm(sn + ". sezonun izlenen " + eps.length + " bölümüne birer tekrar izleme eklensin mi?")) return;
+  show.rewatch = show.rewatch || {};
+  const t = Date.now();
+  eps.forEach(ep => { (show.rewatch[ep.id] = show.rewatch[ep.id] || []).push(t); });
+  saveState();
+  renderShowModal(currentOpenSeasons());
+  renderLibrary(); renderStats();
+  toast(sn + ". sezon tekrar izlendi ↻");
 }
 function undoRewatch(showId, epId){
   const show = state.shows[showId];
