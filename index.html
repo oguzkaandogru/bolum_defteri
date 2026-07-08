@@ -1456,6 +1456,17 @@ async function ghGetFile(){
   if(!res.ok) throw new Error("gh-" + res.status);
   return res.json();
 }
+/* Dosya 1 MB'ı aşınca contents API base64 içeriği boş döndürür;
+   ham (raw) istekte bu sınır 100 MB'dır — veriyi hep bu yolla okuyoruz. */
+async function ghGetData(){
+  const res = await fetch(ghUrl(), {
+    headers: { ...ghHeaders(), "Accept": "application/vnd.github.raw+json" },
+    cache: "no-store"
+  });
+  if(res.status === 404) return null;
+  if(!res.ok) throw new Error("gh-" + res.status);
+  return res.json(); // ham modda yanıt veri.json'ın kendisidir
+}
 async function ghPush(silent){
   if(!syncReady()) return;
   try{
@@ -1484,10 +1495,9 @@ async function ghPush(silent){
 async function ghPull(askConfirm){
   if(!syncReady()) return null;
   try{
-    const file = await ghGetFile();
-    if(!file){ if(askConfirm) toast("GitHub'da henüz veri yok — önce 'Şimdi kaydet' de."); return null; }
-    const data = JSON.parse(b64decode(file.content));
-    if(!data || !data.shows) throw new Error("format");
+    const data = await ghGetData();
+    if(!data){ if(askConfirm) toast("GitHub'da henüz veri yok — önce 'Şimdi kaydet' de."); return null; }
+    if(!data.shows) throw new Error("format");
     if(askConfirm && !confirm("GitHub'daki veri bu cihazdakinin ÜZERİNE yazılacak. Devam edilsin mi?")) return null;
     state = sanitizeState(data);
     saveState(true); renderAll();
@@ -1509,9 +1519,8 @@ function schedulePush(){
 async function initialSync(){
   if(!syncReady()) return;
   try{
-    const file = await ghGetFile();
-    if(!file) return;
-    const remote = JSON.parse(b64decode(file.content));
+    const remote = await ghGetData();
+    if(!remote) return;
     if(remote?.shows && (remote.updatedAt || 0) > (state.updatedAt || 0)){
       state = sanitizeState(remote);
       saveState(true); renderAll();
